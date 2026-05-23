@@ -1,0 +1,894 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TaskHub — モックアップ</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #f0f0f0;
+      --win-bg: #ffffff;
+      --win-sidebar: #f5f5f5;
+      --win-bar: #ebebeb;
+      --border: rgba(0,0,0,0.10);
+      --text: #1d1d1f;
+      --text-2: #6e6e73;
+      --text-3: #adadad;
+      --accent: #007aff;
+      --accent-bg: rgba(0,122,255,0.10);
+      --accent-sel: rgba(0,122,255,0.16);
+      --success: #34c759;
+      --warning: #ff9f0a;
+      --danger: #ff3b30;
+      --purple: #af52de;
+      --tag-bg: #e9e9eb;
+      --row-hover: rgba(0,0,0,0.04);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #1a1a1a;
+        --win-bg: #2c2c2e;
+        --win-sidebar: #1c1c1e;
+        --win-bar: #3a3a3c;
+        --border: rgba(255,255,255,0.10);
+        --text: #f5f5f7;
+        --text-2: #98989d;
+        --text-3: #48484a;
+        --accent: #0a84ff;
+        --accent-bg: rgba(10,132,255,0.15);
+        --accent-sel: rgba(10,132,255,0.20);
+        --tag-bg: #3a3a3c;
+        --row-hover: rgba(255,255,255,0.04);
+      }
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
+      background: var(--bg);
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+      color: var(--text);
+    }
+
+    /* PAGE SHELL */
+    .page-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 32px;
+      background: rgba(0,0,0,0.05);
+      backdrop-filter: blur(10px);
+      border-bottom: 1px solid var(--border);
+      position: sticky; top: 0; z-index: 50;
+    }
+    @media (prefers-color-scheme: dark) {
+      .page-header { background: rgba(0,0,0,0.3); }
+    }
+    .page-back {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 14px; font-weight: 500; color: var(--accent);
+      text-decoration: none; transition: opacity .2s;
+    }
+    .page-back:hover { opacity: .7; }
+    .page-meta { font-size: 13px; color: var(--text-2); }
+    .page-screens { display: flex; gap: 6px; }
+    .scr-btn {
+      padding: 5px 14px; border-radius: 20px; border: 1px solid var(--border);
+      font-size: 12px; font-weight: 600; cursor: pointer;
+      background: transparent; color: var(--text-2); transition: all .15s;
+    }
+    .scr-btn.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .scr-btn:hover:not(.active) { background: var(--row-hover); color: var(--text); }
+
+    .page-body { padding: 28px 24px 48px; display: flex; flex-direction: column; align-items: center; }
+    .mock-label {
+      font-size: 12px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: .08em; color: var(--text-3); margin-bottom: 14px;
+      text-align: center;
+    }
+
+    /* APP WINDOW */
+    .app-win {
+      width: 100%; max-width: 1160px;
+      border-radius: 13px; overflow: hidden;
+      box-shadow: 0 32px 80px rgba(0,0,0,.22), 0 0 0 1px rgba(0,0,0,.14);
+    }
+    @media (prefers-color-scheme: dark) {
+      .app-win { box-shadow: 0 32px 80px rgba(0,0,0,.5), 0 0 0 1px rgba(255,255,255,.06); }
+    }
+
+    /* TITLE BAR */
+    .titlebar {
+      background: var(--win-bar); height: 40px;
+      display: flex; align-items: center; padding: 0 14px;
+      border-bottom: 1px solid var(--border);
+      user-select: none;
+    }
+    .tl-group { display: flex; gap: 7px; margin-right: 14px; }
+    .tl { width: 12px; height: 12px; border-radius: 50%; cursor: default; }
+    .tl-r { background: #ff5f57; } .tl-y { background: #febc2e; } .tl-g { background: #28c840; }
+    .win-title { flex: 1; text-align: center; font-size: 13px; font-weight: 500; color: var(--text-2); }
+    .win-actions { display: flex; gap: 8px; }
+    .win-btn {
+      padding: 3px 10px; border-radius: 5px; font-size: 11px; font-weight: 600;
+      border: 1px solid var(--border); background: transparent; color: var(--text-2);
+      cursor: pointer; transition: all .15s;
+    }
+    .win-btn:hover { background: var(--row-hover); }
+    .win-btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .win-btn.primary:hover { opacity: .9; }
+    .win-btn.syncing { animation: spin .8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* APP BODY */
+    .app-body { display: flex; height: 620px; background: var(--win-bg); }
+
+    /* SIDEBAR */
+    .sidebar {
+      width: 210px; flex-shrink: 0;
+      background: var(--win-sidebar);
+      border-right: 1px solid var(--border);
+      display: flex; flex-direction: column;
+      padding: 10px 6px;
+      overflow-y: auto;
+    }
+    .sb-section { margin-bottom: 18px; }
+    .sb-head {
+      font-size: 11px; font-weight: 600; color: var(--text-3);
+      text-transform: uppercase; letter-spacing: .06em;
+      padding: 2px 10px 5px; pointer-events: none;
+    }
+    .sb-item {
+      display: flex; align-items: center; gap: 8px;
+      padding: 5px 10px; border-radius: 7px;
+      font-size: 13px; color: var(--text); cursor: pointer;
+      transition: background .12s;
+    }
+    .sb-item:hover { background: var(--row-hover); }
+    .sb-item.active { background: var(--accent); color: #fff; }
+    .sb-icon { width: 18px; text-align: center; font-size: 13px; flex-shrink: 0; }
+    .sb-count {
+      margin-left: auto; font-size: 11px; font-weight: 600;
+      color: var(--text-3);
+    }
+    .sb-item.active .sb-count { color: rgba(255,255,255,.7); }
+    .sb-dot {
+      width: 10px; height: 10px; border-radius: 50%; margin-left: auto; flex-shrink: 0;
+    }
+
+    /* TOOLBAR */
+    .toolbar {
+      display: flex; align-items: center; padding: 7px 14px; gap: 8px;
+      border-bottom: 1px solid var(--border);
+      background: var(--win-bg);
+    }
+    .tb-title { font-size: 15px; font-weight: 600; }
+    .tb-badge {
+      font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 10px;
+      background: var(--accent-bg); color: var(--accent);
+    }
+    .tb-gap { flex: 1; }
+    .tb-search {
+      display: flex; align-items: center; gap: 6px;
+      padding: 4px 10px; border-radius: 7px;
+      background: var(--win-sidebar); border: 1px solid var(--border);
+      font-size: 12px; color: var(--text-2); width: 160px;
+    }
+    .filter-strip {
+      display: flex; align-items: center; gap: 6px;
+      padding: 5px 14px; border-bottom: 1px solid var(--border);
+      background: var(--win-bg);
+    }
+    .filter-chip {
+      padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 500;
+      border: 1px solid var(--border); background: transparent; color: var(--text-2);
+      cursor: pointer; transition: all .12s; white-space: nowrap;
+    }
+    .filter-chip.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .filter-chip:hover:not(.active) { background: var(--row-hover); }
+    .fgap { flex: 1; }
+    .hide-done-btn {
+      font-size: 11px; font-weight: 500; color: var(--text-2);
+      cursor: pointer; padding: 3px 8px; border-radius: 6px;
+      border: 1px solid var(--border); background: transparent; transition: all .12s;
+    }
+    .hide-done-btn:hover { background: var(--row-hover); }
+
+    /* TASK LIST PANE */
+    .task-pane { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+    .task-list-wrap { flex: 1; overflow-y: auto; }
+    .task-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 14px; cursor: pointer;
+      border-bottom: 1px solid var(--border);
+      transition: background .1s; position: relative;
+    }
+    .task-row:hover { background: var(--row-hover); }
+    .task-row.selected { background: var(--accent-sel); }
+    .task-row.done .task-name { color: var(--text-3); text-decoration: line-through; }
+    .task-row.done { opacity: .7; }
+    .task-row.hidden { display: none; }
+
+    .chk-wrap { flex-shrink: 0; }
+    .chk {
+      width: 16px; height: 16px; border-radius: 50%;
+      border: 1.5px solid var(--text-3); cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: all .15s; flex-shrink: 0;
+    }
+    .chk:hover { border-color: var(--accent); }
+    .chk.checked { background: var(--success); border-color: var(--success); }
+    .chk.checked::after { content: '✓'; color: #fff; font-size: 9px; font-weight: 700; }
+
+    .task-name { font-size: 13px; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .task-sub-badge {
+      font-size: 10px; font-weight: 600; color: var(--text-3);
+      background: var(--tag-bg); padding: 1px 5px; border-radius: 4px; margin-left: 4px; white-space: nowrap;
+    }
+
+    .src-badge {
+      font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 4px;
+      white-space: nowrap; flex-shrink: 0;
+    }
+    .src-notion { background: rgba(0,0,0,0.06); color: var(--text-2); }
+    .src-gsheet { background: rgba(26,158,85,0.12); color: #1a9e55; }
+    .src-manual { background: var(--tag-bg); color: var(--text-2); }
+    @media (prefers-color-scheme: dark) {
+      .src-notion { background: rgba(255,255,255,.08); }
+    }
+
+    .prog-wrap { display: flex; align-items: center; gap: 5px; flex-shrink: 0; width: 72px; }
+    .prog-bar { flex: 1; height: 4px; border-radius: 2px; background: var(--border); overflow: hidden; }
+    .prog-fill { height: 100%; border-radius: 2px; background: var(--accent); transition: width .3s; }
+    .prog-fill.done-fill { background: var(--success); }
+    .prog-num { font-size: 10px; color: var(--text-3); width: 24px; text-align: right; flex-shrink: 0; }
+
+    .st-badge {
+      font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 4px; flex-shrink: 0;
+    }
+    .st-ip { background: rgba(0,122,255,.12); color: var(--accent); }
+    .st-done { background: rgba(52,199,89,.12); color: var(--success); }
+    .st-rv { background: rgba(255,159,10,.12); color: var(--warning); }
+    .st-todo { background: var(--tag-bg); color: var(--text-2); }
+    .st-hold { background: rgba(175,82,222,.12); color: var(--purple); }
+
+    .prio-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+    .prio-low { background: var(--text-3); }
+    .prio-mid { background: var(--warning); }
+    .prio-high { background: #ff6b00; }
+    .prio-urgent { background: var(--danger); }
+
+    .due-date { font-size: 11px; color: var(--text-3); flex-shrink: 0; min-width: 52px; text-align: right; }
+    .due-date.overdue { color: var(--danger); font-weight: 600; }
+    .due-date.today-due { color: var(--warning); font-weight: 600; }
+
+    .footer-bar {
+      padding: 6px 14px; border-top: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+      font-size: 11px; color: var(--text-3);
+    }
+
+    /* DETAIL PANE */
+    .detail-pane {
+      width: 280px; flex-shrink: 0;
+      border-left: 1px solid var(--border);
+      background: var(--win-bg);
+      overflow-y: auto; display: flex; flex-direction: column;
+    }
+    .detail-pane.hidden-detail { display: none; }
+    .det-header { padding: 14px 14px 10px; border-bottom: 1px solid var(--border); }
+    .det-title { font-size: 15px; font-weight: 600; line-height: 1.35; margin-bottom: 10px; }
+    .det-source { font-size: 11px; color: var(--text-3); display: flex; align-items: center; gap: 5px; }
+    .det-section { padding: 10px 14px; border-bottom: 1px solid var(--border); }
+    .det-row { display: flex; align-items: center; justify-content: space-between; padding: 4px 0; }
+    .det-label { font-size: 11px; color: var(--text-2); min-width: 60px; }
+    .det-value { font-size: 12px; color: var(--text); text-align: right; }
+    .det-st-sel {
+      font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 5px;
+      border: none; cursor: pointer;
+    }
+    .prog-full-wrap { padding: 4px 0; }
+    .prog-label-row { display: flex; justify-content: space-between; margin-bottom: 5px; }
+    .prog-slider-wrap { display: flex; align-items: center; gap: 8px; }
+    .prog-slider {
+      flex: 1; -webkit-appearance: none; height: 4px; border-radius: 2px;
+      background: var(--border); outline: none; cursor: pointer;
+    }
+    .prog-slider::-webkit-slider-thumb {
+      -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%;
+      background: var(--accent); cursor: pointer; box-shadow: 0 1px 3px rgba(0,0,0,.2);
+    }
+    .prog-val { font-size: 12px; color: var(--accent); font-weight: 600; min-width: 30px; text-align: right; }
+
+    .memo-box {
+      font-size: 12px; color: var(--text); line-height: 1.6;
+      padding: 4px 0;
+    }
+    .memo-placeholder { color: var(--text-3); }
+
+    .tags-row { display: flex; flex-wrap: wrap; gap: 5px; padding: 4px 0; }
+    .tag {
+      font-size: 11px; font-weight: 500; padding: 2px 8px; border-radius: 4px;
+      background: var(--tag-bg); color: var(--text-2);
+    }
+
+    .subtask-list { display: flex; flex-direction: column; gap: 6px; padding: 4px 0; }
+    .sub-row { display: flex; align-items: center; gap: 7px; }
+    .sub-chk {
+      width: 13px; height: 13px; border-radius: 3px;
+      border: 1.5px solid var(--text-3); flex-shrink: 0; cursor: pointer;
+      display: flex; align-items: center; justify-content: center; transition: all .12s;
+    }
+    .sub-chk.checked { background: var(--success); border-color: var(--success); }
+    .sub-chk.checked::after { content: '✓'; color: #fff; font-size: 8px; font-weight: 700; }
+    .sub-name { font-size: 12px; color: var(--text); }
+    .sub-name.done { text-decoration: line-through; color: var(--text-3); }
+
+    .work-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+    .work-input {
+      width: 56px; padding: 4px 8px; border-radius: 6px;
+      border: 1px solid var(--border); background: var(--win-sidebar);
+      font-size: 13px; color: var(--text); text-align: right; outline: none;
+    }
+    .work-label { font-size: 12px; color: var(--text-2); }
+
+    /* REPORT MODAL */
+    .modal-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.45);
+      backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center;
+      z-index: 200; opacity: 0; pointer-events: none; transition: opacity .2s;
+    }
+    .modal-overlay.show { opacity: 1; pointer-events: all; }
+    .modal {
+      background: var(--win-bg); border-radius: 14px; width: 520px; max-width: 90vw;
+      box-shadow: 0 24px 60px rgba(0,0,0,.3); overflow: hidden;
+      transform: scale(.96); transition: transform .2s;
+    }
+    .modal-overlay.show .modal { transform: scale(1); }
+    .modal-header {
+      padding: 16px 20px 12px; border-bottom: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .modal-title { font-size: 15px; font-weight: 600; }
+    .modal-close {
+      width: 24px; height: 24px; border-radius: 50%; border: none;
+      background: var(--tag-bg); color: var(--text-2); cursor: pointer;
+      font-size: 13px; display: flex; align-items: center; justify-content: center;
+    }
+    .modal-body { padding: 16px 20px; max-height: 60vh; overflow-y: auto; }
+    .modal-tpl {
+      font-family: 'SF Mono', 'Menlo', monospace; font-size: 13px;
+      line-height: 1.85; color: var(--text);
+      background: var(--win-sidebar); padding: 14px 16px; border-radius: 8px;
+      white-space: pre-wrap;
+    }
+    .modal-footer {
+      padding: 12px 20px; border-top: 1px solid var(--border);
+      display: flex; gap: 8px; justify-content: flex-end;
+    }
+    .modal-btn {
+      padding: 7px 16px; border-radius: 8px; font-size: 13px; font-weight: 600;
+      border: none; cursor: pointer; transition: opacity .15s;
+    }
+    .modal-btn:hover { opacity: .85; }
+    .modal-btn-sec { background: var(--tag-bg); color: var(--text); }
+    .modal-btn-pri { background: var(--accent); color: #fff; }
+
+    /* SCREEN DESCRIPTIONS */
+    .screen-desc {
+      max-width: 1160px; width: 100%;
+      margin-top: 20px; padding: 16px 20px;
+      background: rgba(0,0,0,0.04); border-radius: 10px;
+      font-size: 13px; color: var(--text-2); line-height: 1.6;
+    }
+    @media (prefers-color-scheme: dark) {
+      .screen-desc { background: rgba(255,255,255,.04); }
+    }
+    .screen-desc strong { color: var(--text); }
+
+    /* RESPONSIVE */
+    @media (max-width: 900px) {
+      .detail-pane { display: none !important; }
+      .sidebar { width: 160px; }
+    }
+    @media (max-width: 640px) {
+      .sidebar { display: none; }
+      .prog-wrap, .due-date { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- PAGE HEADER -->
+<header class="page-header">
+  <a href="index.html" class="page-back">
+    <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor"><path d="M11 3L6 8l5 5" stroke="currentColor" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    概要に戻る
+  </a>
+  <div class="page-screens">
+    <button class="scr-btn active" onclick="switchScreen('today',this)">今日ビュー</button>
+    <button class="scr-btn" onclick="switchScreen('inbox',this)">インボックス</button>
+    <button class="scr-btn" onclick="switchScreen('project',this)">プロジェクト</button>
+  </div>
+  <span class="page-meta">モックアップ — インタラクティブ</span>
+</header>
+
+<main class="page-body">
+  <p class="mock-label">タスク一覧画面 — デザインモック</p>
+
+  <div class="app-win">
+    <!-- TITLE BAR -->
+    <div class="titlebar">
+      <div class="tl-group">
+        <div class="tl tl-r"></div>
+        <div class="tl tl-y"></div>
+        <div class="tl tl-g"></div>
+      </div>
+      <span class="win-title">TaskHub</span>
+      <div class="win-actions">
+        <button class="win-btn" id="syncBtn" onclick="doSync()" title="同期">⟳ 同期</button>
+        <button class="win-btn primary" onclick="showReport()" id="reportBtn" style="display:none">📝 日報を生成</button>
+      </div>
+    </div>
+
+    <!-- APP BODY -->
+    <div class="app-body">
+
+      <!-- SIDEBAR -->
+      <aside class="sidebar">
+        <div class="sb-section">
+          <div class="sb-head">固定</div>
+          <div class="sb-item" id="sb-inbox" onclick="switchScreen('inbox',null)">
+            <span class="sb-icon">📥</span> インボックス
+            <span class="sb-count">5</span>
+          </div>
+          <div class="sb-item active" id="sb-today" onclick="switchScreen('today',null)">
+            <span class="sb-icon">📅</span> 今日
+            <span class="sb-count">4</span>
+          </div>
+        </div>
+        <div class="sb-section">
+          <div class="sb-head">プロジェクト</div>
+          <div class="sb-item" id="sb-dwai" onclick="switchScreen('dwai',null)">
+            <span class="sb-icon">📁</span> DWAI
+            <div class="sb-dot" style="background:#ff9f0a"></div>
+          </div>
+          <div class="sb-item" id="sb-project" onclick="switchScreen('project',null)">
+            <span class="sb-icon">📁</span> AI エージェント
+            <div class="sb-dot" style="background:#0a84ff"></div>
+          </div>
+          <div class="sb-item" id="sb-client" onclick="switchScreen('client',null)">
+            <span class="sb-icon">📁</span> クライアント A
+            <div class="sb-dot" style="background:#34c759"></div>
+          </div>
+        </div>
+        <div class="sb-section">
+          <div class="sb-head">タグ</div>
+          <div class="sb-item"><span class="sb-icon">🏷</span> 開発</div>
+          <div class="sb-item"><span class="sb-icon">🏷</span> 報告</div>
+          <div class="sb-item"><span class="sb-icon">🏷</span> 設計</div>
+        </div>
+      </aside>
+
+      <!-- TASK PANE -->
+      <div class="task-pane">
+        <!-- Toolbar -->
+        <div class="toolbar">
+          <span class="tb-title" id="viewTitle">今日</span>
+          <span class="tb-badge" id="hoursTotal">合計 3.5h</span>
+          <div class="tb-gap"></div>
+          <div class="tb-search">
+            <span>🔍</span><span>検索…</span>
+          </div>
+          <button class="win-btn" style="font-size:14px;padding:3px 8px" title="新規タスク">＋</button>
+          <button class="win-btn" title="並び替え">⇅</button>
+        </div>
+        <!-- Filter strip -->
+        <div class="filter-strip">
+          <button class="filter-chip active" onclick="filterBy('all',this)">すべて</button>
+          <button class="filter-chip" onclick="filterBy('inprogress',this)">進行中</button>
+          <button class="filter-chip" onclick="filterBy('done',this)">完了</button>
+          <button class="filter-chip" onclick="filterBy('notion',this)">Notion</button>
+          <button class="filter-chip" onclick="filterBy('gsheet',this)">GSheet</button>
+          <div class="fgap"></div>
+          <button class="hide-done-btn" id="hideDoneBtn" onclick="toggleHideDone()">完了を隠す</button>
+        </div>
+
+        <!-- Task List -->
+        <div class="task-list-wrap" id="taskListWrap">
+          <!-- rows injected by JS -->
+        </div>
+
+        <div class="footer-bar">
+          <span id="footerCount">5 件</span>
+          <span id="footerSync">最終同期: 今日 08:22</span>
+        </div>
+      </div>
+
+      <!-- DETAIL PANE -->
+      <div class="detail-pane" id="detailPane">
+        <div id="detailContent">
+          <div style="padding:40px 20px;text-align:center;color:var(--text-3);font-size:13px">
+            タスクを選択すると<br>詳細が表示されます
+          </div>
+        </div>
+      </div>
+
+    </div><!-- app-body -->
+  </div><!-- app-win -->
+
+  <div class="screen-desc" id="screenDesc">
+    <strong>今日ビュー（⌘T）</strong>：期限が今日のタスクとステータスが「進行中」のタスクを全プロジェクト横断で自動収集。作業時間を入力して日報生成に使います。チェックボックスで完了トグル、行クリックで詳細が右ペインに表示されます。
+  </div>
+</main>
+
+<!-- REPORT MODAL -->
+<div class="modal-overlay" id="reportModal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">📝 業務日報 — 2026/05/23</span>
+      <button class="modal-close" onclick="hideReport()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="modal-tpl" id="reportContent"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="modal-btn modal-btn-sec" onclick="hideReport()">閉じる</button>
+      <button class="modal-btn modal-btn-pri" onclick="copyReport()">📋 コピー</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── DATA ───────────────────────────────────────────────────
+const SCREENS = {
+  today: {
+    title: '今日', hours: '合計 3.5h', showHours: true, showReport: true,
+    desc: '<strong>今日ビュー（⌘T）</strong>：期限が今日のタスクとステータスが「進行中」のタスクを全プロジェクト横断で自動収集。作業時間を入力して日報生成に使います。チェックボックスで完了トグル、行クリックで詳細が右ペインに表示されます。',
+    footerSync: '最終同期: 今日 08:22',
+    tasks: [
+      { id:1, name:'Vercel について調査', src:'notion', st:'done', pct:100, prio:'mid', due:'今日', done:true, subs:0, hours:1.0 },
+      { id:2, name:'専用アプリ開発', src:'notion', st:'inprogress', pct:30, prio:'high', due:'05/31', done:false, subs:3, hours:2.0 },
+      { id:3, name:'週次レポート作成', src:'gsheet', st:'review', pct:0, prio:'mid', due:'今日', done:false, subs:0, hours:0.5 },
+      { id:4, name:'API 設計レビュー', src:'manual', st:'inprogress', pct:50, prio:'high', due:'明日', done:false, subs:0, hours:0 },
+      { id:5, name:'ドキュメント更新', src:'manual', st:'todo', pct:20, prio:'low', due:'05/25', done:false, subs:0, hours:0 },
+    ]
+  },
+  inbox: {
+    title: 'インボックス', hours: '', showHours: false, showReport: false,
+    desc: '<strong>インボックス</strong>：外部ツールから同期で取込まれたタスクの受取専用リスト。サイドバー最上部に固定表示され、削除・リネーム不可。任意のプロジェクトリストへドラッグ&ドロップで移動できます。',
+    footerSync: '最終同期: 今日 08:22',
+    tasks: [
+      { id:6,  name:'Q2 スプリント計画書レビュー', src:'notion', st:'todo', pct:0, prio:'high', due:'05/24', done:false, subs:0, hours:0 },
+      { id:7,  name:'クライアントA 5月分請求確認', src:'gsheet', st:'todo', pct:0, prio:'urgent', due:'今日', done:false, subs:0, hours:0 },
+      { id:8,  name:'デザインシステム整備', src:'notion', st:'inprogress', pct:15, prio:'mid', due:'05/30', done:false, subs:2, hours:0 },
+      { id:9,  name:'テスト自動化スクリプト', src:'gsheet', st:'todo', pct:0, prio:'low', due:'06/01', done:false, subs:0, hours:0 },
+      { id:10, name:'オンボーディング資料更新', src:'notion', st:'todo', pct:0, prio:'low', due:'06/05', done:false, subs:0, hours:0 },
+    ]
+  },
+  project: {
+    title: 'AI エージェント課題', hours: '', showHours: false, showReport: false,
+    desc: '<strong>プロジェクトビュー</strong>：選択プロジェクト配下のタスク一覧。Notion から同期されたタスクと手動追加タスクが混在して表示されます。進捗バーとステータスで全体の状態を一目で確認できます。',
+    footerSync: '最終同期: 今日 08:22',
+    tasks: [
+      { id:2,  name:'専用アプリ開発', src:'notion', st:'inprogress', pct:30, prio:'high', due:'05/31', done:false, subs:3, hours:2.0 },
+      { id:11, name:'ClaudeCode 自走基盤設定', src:'notion', st:'done', pct:100, prio:'mid', due:'05/23', done:true, subs:0, hours:4.0 },
+      { id:12, name:'Vercel デプロイ設定', src:'notion', st:'todo', pct:0, prio:'mid', due:'06/01', done:false, subs:0, hours:0 },
+      { id:13, name:'テスト実装', src:'manual', st:'todo', pct:0, prio:'low', due:'06/10', done:false, subs:0, hours:0 },
+    ]
+  },
+  dwai: {
+    title: 'DWAI', hours: '', showHours: false, showReport: false,
+    desc: '<strong>DWAIプロジェクト</strong>：Notion から同期中のタスク一覧。',
+    footerSync: '最終同期: 今日 08:22',
+    tasks: [
+      { id:1,  name:'Vercel について調査', src:'notion', st:'done', pct:100, prio:'mid', due:'今日', done:true, subs:0, hours:1.0 },
+      { id:14, name:'週次 MTG 議事録作成', src:'notion', st:'review', pct:80, prio:'mid', due:'今日', done:false, subs:0, hours:0.5 },
+      { id:15, name:'KPI ダッシュボード更新', src:'gsheet', st:'todo', pct:0, prio:'low', due:'05/26', done:false, subs:0, hours:0 },
+    ]
+  },
+  client: {
+    title: 'クライアント A', hours: '', showHours: false, showReport: false,
+    desc: '<strong>クライアント Aプロジェクト</strong>：Google スプレッドシートから同期中のタスク一覧。',
+    footerSync: '最終同期: 今日 08:22',
+    tasks: [
+      { id:3,  name:'週次レポート作成', src:'gsheet', st:'review', pct:0, prio:'mid', due:'今日', done:false, subs:0, hours:0.5 },
+      { id:16, name:'5月分請求書確認', src:'gsheet', st:'todo', pct:0, prio:'urgent', due:'今日', done:false, subs:0, hours:0 },
+      { id:17, name:'要件定義書フィードバック対応', src:'gsheet', st:'inprogress', pct:60, prio:'high', due:'05/25', done:false, subs:2, hours:1.5 },
+    ]
+  },
+};
+
+const DETAILS = {
+  1:  { title:'Vercel について調査', srcLabel:'Notion · DWAI', connection:'仕事用 Notion', st:'done', pct:100, prio:'中', due:'2026/05/23', tags:['開発','インフラ'], memo:'Vercel の価格プランと Next.js の相性を調査。Pro プランが最適と判断。', subs:[{name:'価格プラン比較',done:true},{name:'Next.js 動作確認',done:true}], hours:'1.0' },
+  2:  { title:'専用アプリ開発', srcLabel:'Notion · AI エージェント課題', connection:'仕事用 Notion', st:'inprogress', pct:30, prio:'高', due:'2026/05/31', tags:['開発'], memo:'ClaudeCode を使った自走型開発環境の構築。SwiftUI + SwiftData で macOS ネイティブ実装。', subs:[{name:'ClaudeCode 自走基盤設定',done:true},{name:'開発環境構築',done:true},{name:'コア機能実装',done:false}], hours:'2.0' },
+  3:  { title:'週次レポート作成', srcLabel:'Google スプレッドシート · クライアント A', connection:'クライアントA シート', st:'review', pct:0, prio:'中', due:'2026/05/23', tags:['報告'], memo:'', subs:[], hours:'0.5' },
+  4:  { title:'API 設計レビュー', srcLabel:'手動作成', connection:'—', st:'inprogress', pct:50, prio:'高', due:'2026/05/24', tags:['設計'], memo:'認証エンドポイントのレビュー。セキュリティ観点を中心に確認。', subs:[], hours:'0' },
+  5:  { title:'ドキュメント更新', srcLabel:'手動作成', connection:'—', st:'todo', pct:20, prio:'低', due:'2026/05/25', tags:['ドキュメント'], memo:'', subs:[], hours:'0' },
+  6:  { title:'Q2 スプリント計画書レビュー', srcLabel:'Notion · DWAI', connection:'仕事用 Notion', st:'todo', pct:0, prio:'高', due:'2026/05/24', tags:['設計'], memo:'', subs:[], hours:'0' },
+  7:  { title:'クライアントA 5月分請求確認', srcLabel:'Google スプレッドシート · クライアント A', connection:'クライアントA シート', st:'todo', pct:0, prio:'緊急', due:'2026/05/23', tags:['報告'], memo:'', subs:[], hours:'0' },
+  8:  { title:'デザインシステム整備', srcLabel:'Notion · DWAI', connection:'仕事用 Notion', st:'inprogress', pct:15, prio:'中', due:'2026/05/30', tags:['開発','デザイン'], memo:'', subs:[{name:'カラーパレット定義',done:true},{name:'コンポーネント整理',done:false}], hours:'0' },
+  11: { title:'ClaudeCode 自走基盤設定', srcLabel:'Notion · AI エージェント課題', connection:'仕事用 Notion', st:'done', pct:100, prio:'中', due:'2026/05/23', tags:['開発','インフラ'], memo:'CLAUDE.md、ルール、CI パイプラインを整備。', subs:[], hours:'4.0' },
+  12: { title:'Vercel デプロイ設定', srcLabel:'Notion · AI エージェント課題', connection:'仕事用 Notion', st:'todo', pct:0, prio:'中', due:'2026/06/01', tags:['インフラ'], memo:'', subs:[], hours:'0' },
+  13: { title:'テスト実装', srcLabel:'手動作成', connection:'—', st:'todo', pct:0, prio:'低', due:'2026/06/10', tags:['開発'], memo:'', subs:[], hours:'0' },
+  14: { title:'週次 MTG 議事録作成', srcLabel:'Notion · DWAI', connection:'仕事用 Notion', st:'review', pct:80, prio:'中', due:'2026/05/23', tags:['報告'], memo:'', subs:[], hours:'0.5' },
+  15: { title:'KPI ダッシュボード更新', srcLabel:'Google スプレッドシート · DWAI', connection:'仕事用 GSheet', st:'todo', pct:0, prio:'低', due:'2026/05/26', tags:['報告'], memo:'', subs:[], hours:'0' },
+  16: { title:'5月分請求書確認', srcLabel:'Google スプレッドシート · クライアント A', connection:'クライアントA シート', st:'todo', pct:0, prio:'緊急', due:'2026/05/23', tags:['報告'], memo:'', subs:[], hours:'0' },
+  17: { title:'要件定義書フィードバック対応', srcLabel:'Google スプレッドシート · クライアント A', connection:'クライアントA シート', st:'inprogress', pct:60, prio:'高', due:'2026/05/25', tags:['設計','報告'], memo:'', subs:[{name:'セクション3 修正',done:true},{name:'セクション5 追記',done:false}], hours:'1.5' },
+};
+
+// ─── STATE ──────────────────────────────────────────────────
+let currentScreen = 'today';
+let hideDone = false;
+let activeFilter = 'all';
+let selectedId = null;
+let taskDoneState = {};  // id → bool override
+
+// ─── RENDER ─────────────────────────────────────────────────
+function statusClass(st) {
+  return { done:'st-done', inprogress:'st-ip', review:'st-rv', todo:'st-todo', hold:'st-hold' }[st] || 'st-todo';
+}
+function statusLabel(st) {
+  return { done:'完了', inprogress:'進行中', review:'レビュー中', todo:'未着手', hold:'保留' }[st] || st;
+}
+function prioClass(p) {
+  return { low:'prio-low', mid:'prio-mid', high:'prio-high', urgent:'prio-urgent' }[p] || 'prio-low';
+}
+function srcClass(s) {
+  return { notion:'src-notion', gsheet:'src-gsheet', manual:'src-manual' }[s] || 'src-manual';
+}
+function srcLabel(s) {
+  return { notion:'Notion', gsheet:'GSheet', manual:'手動' }[s] || s;
+}
+
+function renderTasks() {
+  const screen = SCREENS[currentScreen];
+  const wrap = document.getElementById('taskListWrap');
+  wrap.innerHTML = '';
+  let count = 0;
+  screen.tasks.forEach(t => {
+    const isDone = taskDoneState[t.id] !== undefined ? taskDoneState[t.id] : t.done;
+    const st = isDone ? 'done' : t.st;
+    const pct = isDone ? 100 : t.pct;
+    let hide = false;
+    if (hideDone && isDone) hide = true;
+    if (activeFilter === 'inprogress' && st !== 'inprogress') hide = true;
+    if (activeFilter === 'done' && !isDone) hide = true;
+    if (activeFilter === 'notion' && t.src !== 'notion') hide = true;
+    if (activeFilter === 'gsheet' && t.src !== 'gsheet') hide = true;
+    if (!hide) count++;
+
+    const row = document.createElement('div');
+    row.className = `task-row${isDone ? ' done' : ''}${selectedId === t.id ? ' selected' : ''}${hide ? ' hidden' : ''}`;
+    row.dataset.id = t.id;
+    row.innerHTML = `
+      <div class="chk-wrap">
+        <div class="chk ${isDone ? 'checked' : ''}" onclick="toggleTask(event,${t.id})"></div>
+      </div>
+      <span class="task-name">
+        ${t.name}
+        ${t.subs ? `<span class="task-sub-badge">${t.subs} 件</span>` : ''}
+      </span>
+      <span class="src-badge ${srcClass(t.src)}">${srcLabel(t.src)}</span>
+      <div class="prog-wrap">
+        <div class="prog-bar"><div class="prog-fill ${isDone?'done-fill':''}" style="width:${pct}%"></div></div>
+        <span class="prog-num">${pct}%</span>
+      </div>
+      <span class="st-badge ${statusClass(st)}">${statusLabel(st)}</span>
+      <div class="prio-dot ${prioClass(t.prio)}" title="優先度: ${{low:'低',mid:'中',high:'高',urgent:'緊急'}[t.prio]}"></div>
+      <span class="due-date ${t.due==='今日'?'today-due':''}">${t.due}</span>
+    `;
+    row.addEventListener('click', (e) => {
+      if (e.target.classList.contains('chk')) return;
+      selectTask(t.id);
+    });
+    wrap.appendChild(row);
+  });
+  document.getElementById('footerCount').textContent = `${count} 件`;
+}
+
+function selectTask(id) {
+  selectedId = id;
+  document.querySelectorAll('.task-row').forEach(r => {
+    r.classList.toggle('selected', parseInt(r.dataset.id) === id);
+  });
+  renderDetail(id);
+}
+
+function renderDetail(id) {
+  const d = DETAILS[id];
+  if (!d) return;
+  const pct = d.pct;
+  const stColors = { done:'st-done', inprogress:'st-ip', review:'st-rv', todo:'st-todo', hold:'st-hold' };
+  const subtasksHtml = d.subs.length ? `
+    <div class="subtask-list">
+      ${d.subs.map(s => `
+        <div class="sub-row">
+          <div class="sub-chk ${s.done?'checked':''}" onclick="this.classList.toggle('checked');this.nextElementSibling.classList.toggle('done')"></div>
+          <span class="sub-name ${s.done?'done':''}">${s.name}</span>
+        </div>
+      `).join('')}
+    </div>
+  ` : '<span style="font-size:12px;color:var(--text-3)">なし</span>';
+  document.getElementById('detailContent').innerHTML = `
+    <div class="det-header">
+      <div class="det-title">${d.title}</div>
+      <div class="det-source">
+        ${d.srcLabel === '手動作成' ? '✏️ 手動作成' : `🔗 ${d.srcLabel}`}
+      </div>
+    </div>
+    <div class="det-section">
+      <div class="det-row">
+        <span class="det-label">ステータス</span>
+        <button class="det-st-sel st-badge ${stColors[d.st]}">${statusLabel(d.st)}</button>
+      </div>
+      <div class="det-row">
+        <span class="det-label">優先度</span>
+        <span class="det-value">${d.prio}</span>
+      </div>
+      <div class="det-row">
+        <span class="det-label">期限日</span>
+        <span class="det-value">${d.due}</span>
+      </div>
+    </div>
+    <div class="det-section">
+      <div class="prog-full-wrap">
+        <div class="prog-label-row">
+          <span class="det-label">進捗</span>
+          <span class="prog-val" id="dpv">${pct}%</span>
+        </div>
+        <div class="prog-slider-wrap">
+          <input type="range" class="prog-slider" id="dpSlider" min="0" max="100" value="${pct}"
+            oninput="document.getElementById('dpv').textContent=this.value+'%'">
+        </div>
+      </div>
+    </div>
+    <div class="det-section">
+      <div class="det-label" style="margin-bottom:6px">タグ</div>
+      <div class="tags-row">
+        ${d.tags.map(t => `<span class="tag">${t}</span>`).join('')}
+      </div>
+    </div>
+    <div class="det-section">
+      <div class="det-label" style="margin-bottom:6px">メモ</div>
+      <div class="memo-box ${d.memo?'':'memo-placeholder'}">${d.memo || 'メモを追加…'}</div>
+    </div>
+    <div class="det-section">
+      <div class="det-label" style="margin-bottom:8px">サブタスク</div>
+      ${subtasksHtml}
+    </div>
+    <div class="det-section">
+      <div class="det-label" style="margin-bottom:6px">今日の作業時間</div>
+      <div class="work-row">
+        <input type="number" class="work-input" value="${d.hours}" min="0" max="24" step="0.5">
+        <span class="work-label">h</span>
+      </div>
+    </div>
+  `;
+}
+
+// ─── INTERACTIONS ────────────────────────────────────────────
+function toggleTask(e, id) {
+  e.stopPropagation();
+  const prev = taskDoneState[id] !== undefined ? taskDoneState[id] : SCREENS[currentScreen].tasks.find(t=>t.id===id)?.done;
+  taskDoneState[id] = !prev;
+  renderTasks();
+  if (selectedId === id) renderDetail(id);
+}
+
+function switchScreen(name, btnEl) {
+  currentScreen = name;
+  selectedId = null;
+  // update sidebar
+  ['sb-inbox','sb-today','sb-dwai','sb-project','sb-client'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.classList.remove('active');
+  });
+  const map = {today:'sb-today',inbox:'sb-inbox',project:'sb-project',dwai:'sb-dwai',client:'sb-client'};
+  if (map[name]) document.getElementById(map[name])?.classList.add('active');
+  // update top screen buttons
+  document.querySelectorAll('.scr-btn').forEach(b => b.classList.remove('active'));
+  if (btnEl) btnEl.classList.add('active');
+  else {
+    const labels = {today:'今日ビュー',inbox:'インボックス',project:'プロジェクト'};
+    document.querySelectorAll('.scr-btn').forEach(b => {
+      if (b.textContent === labels[name]) b.classList.add('active');
+    });
+  }
+  // update title/hours/report
+  const s = SCREENS[name];
+  document.getElementById('viewTitle').textContent = s.title;
+  const hb = document.getElementById('hoursTotal');
+  hb.textContent = s.hours;
+  hb.style.display = s.showHours ? '' : 'none';
+  document.getElementById('reportBtn').style.display = s.showReport ? '' : 'none';
+  document.getElementById('footerSync').textContent = s.footerSync;
+  document.getElementById('screenDesc').innerHTML = s.desc;
+  // reset detail
+  document.getElementById('detailContent').innerHTML = '<div style="padding:40px 20px;text-align:center;color:var(--text-3);font-size:13px">タスクを選択すると<br>詳細が表示されます</div>';
+  renderTasks();
+}
+
+function filterBy(type, btn) {
+  activeFilter = type;
+  document.querySelectorAll('.filter-chip').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderTasks();
+}
+
+function toggleHideDone() {
+  hideDone = !hideDone;
+  const btn = document.getElementById('hideDoneBtn');
+  btn.textContent = hideDone ? '完了を表示' : '完了を隠す';
+  btn.style.background = hideDone ? 'var(--accent-bg)' : '';
+  btn.style.color = hideDone ? 'var(--accent)' : '';
+  renderTasks();
+}
+
+function doSync() {
+  const btn = document.getElementById('syncBtn');
+  btn.textContent = '⟳ 同期中…';
+  btn.classList.add('syncing');
+  btn.disabled = true;
+  setTimeout(() => {
+    btn.textContent = '⟳ 同期';
+    btn.classList.remove('syncing');
+    btn.disabled = false;
+    document.getElementById('footerSync').textContent = '最終同期: たった今';
+  }, 1800);
+}
+
+function showReport() {
+  const report = `【2026/05/23 業務報告】
+■今日やったこと: 計3.5h
+朝会 0.5h
+DWAI 1.0h
+● Vercelについて調査
+AIエージェント課題 2.0h
+● 専用アプリ開発
+  ○ ClaudeCode自走基盤設定 ✓
+  ○ 開発環境構築 ✓
+  ○ コア機能実装
+
+■勉強になったこと
+
+
+■明日やること
+AIエージェント課題
+● 専用アプリ開発[30%]
+
+クライアントA
+● 週次レポート作成[0%]
+
+■連絡事項
+
+
+■感想
+`;
+  document.getElementById('reportContent').textContent = report;
+  document.getElementById('reportModal').classList.add('show');
+}
+
+function hideReport() {
+  document.getElementById('reportModal').classList.remove('show');
+}
+
+function copyReport() {
+  const text = document.getElementById('reportContent').textContent;
+  navigator.clipboard?.writeText(text).then(() => {
+    const btn = event.target;
+    btn.textContent = '✓ コピー完了';
+    setTimeout(() => btn.textContent = '📋 コピー', 1500);
+  });
+}
+
+document.getElementById('reportModal').addEventListener('click', function(e) {
+  if (e.target === this) hideReport();
+});
+
+// Init
+switchScreen('today', null);
+document.querySelectorAll('.scr-btn')[0].classList.add('active');
+</script>
+</body>
+</html>
