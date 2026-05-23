@@ -1,0 +1,69 @@
+disabled_rules:
+  - trailing_whitespace
+
+opt_in_rules:
+  - empty_count
+  - explicit_init
+  - first_where
+  - force_unwrapping
+  - implicitly_unwrapped_optional
+  - missing_docs
+  - private_over_fileprivate
+
+excluded:
+  - DerivedData
+  - .build
+  - TaskHubTests
+  - TaskHubUITests
+
+line_length:
+  warning: 120
+  error: 200
+
+type_body_length:
+  warning: 300
+  error: 500
+
+function_body_length:
+  warning: 40
+  error: 60
+
+file_length:
+  warning: 600
+  error: 800
+
+cyclomatic_complexity:
+  warning: 10
+  error: 20
+
+nesting:
+  type_level:
+    warning: 2
+  function_level:
+    warning: 4
+
+identifier_name:
+  min_length:
+    warning: 2
+  excluded:
+    - id
+    - n
+    - x
+    - y
+
+custom_rules:
+  no_print:
+    name: "No print() statements"
+    regex: '(?<!\/\/\s)(?<!\*\s)\bprint\s*\('
+    message: "Use Logger(subsystem:category:) instead of print()"
+    severity: warning
+  no_debug_print:
+    name: "No debugPrint() statements"
+    regex: '(?<!\/\/\s)\bdebugPrint\s*\('
+    message: "Use Logger(subsystem:category:) instead of debugPrint()"
+    severity: warning
+  no_hardcoded_http:
+    name: "No hardcoded HTTP URLs"
+    regex: '"http://'
+    message: "Use HTTPS only"
+    severity: error

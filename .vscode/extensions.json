@@ -1,0 +1,9 @@
+{
+  "recommendations": [
+    "EditorConfig.EditorConfig",
+    "sswg.swift-lang",
+    "vadimcn.vscode-lldb",
+    "redhat.vscode-yaml",
+    "bierner.markdown-mermaid"
+  ]
+}

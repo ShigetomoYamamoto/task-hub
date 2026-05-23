@@ -1,0 +1,21 @@
+{
+  "editor.formatOnSave": true,
+  "editor.insertSpaces": true,
+  "editor.tabSize": 4,
+  "files.trimTrailingWhitespace": true,
+  "files.insertFinalNewline": true,
+  "[swift]": {
+    "editor.tabSize": 4
+  },
+  "[yaml]": {
+    "editor.tabSize": 2
+  },
+  "[json]": {
+    "editor.tabSize": 2
+  },
+  "files.exclude": {
+    "DerivedData/": true,
+    "*.xcworkspace/xcuserdata/": true,
+    ".build/": true
+  }
+}

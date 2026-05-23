@@ -1,0 +1,41 @@
+core-models:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'TaskHub/Core/Models/**'
+
+repository:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'TaskHub/Core/Repositories/**'
+
+service:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'TaskHub/Core/Services/**'
+
+integrations:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'TaskHub/Integrations/**'
+
+report:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'TaskHub/Features/Report/**'
+
+ui:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'TaskHub/Features/**/*View.swift'
+      - 'TaskHub/DesignSystem/**'
+
+tests:
+  - changed-files:
+    - any-glob-to-any-file:
+      - 'TaskHubTests/**'
+      - 'TaskHubUITests/**'
+
+ci:
+  - changed-files:
+    - any-glob-to-any-file:
+      - '.github/**'

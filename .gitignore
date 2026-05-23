@@ -1,0 +1,56 @@
+# Xcode
+DerivedData/
+*.xcuserstate
+*.xcscmblueprint
+xcuserdata/
+*.xccheckout
+
+# Build
+.build/
+build/
+*.o
+*.d
+
+# Swift Package Manager
+.swiftpm/
+Package.resolved
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+.Spotlight-V100
+.Trashes
+
+# Credentials & Secrets
+.env
+.env.local
+*.pem
+*.key
+*.secret
+*.p12
+*.mobileprovision
+
+# Archive / Distribution
+*.dmg
+*.pkg
+*.ipa
+*.xcarchive
+
+# Editor
+*.swp
+*.swo
+*~
+
+# Test results
+TestResults/
+*.xcresult
+
+# Coverage
+*.lcov
+coverage/
+
+# Temp
+/tmp/

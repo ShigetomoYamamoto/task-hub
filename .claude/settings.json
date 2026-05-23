@@ -1,0 +1,28 @@
+{
+  "defaultMode": "auto",
+  "permissions": {
+    "allow": [
+      "Bash(xcodebuild *)",
+      "Bash(xcrun *)",
+      "Bash(swift *)",
+      "Bash(swiftlint *)",
+      "Bash(swiftformat *)",
+      "Bash(brew install swiftlint)",
+      "Bash(brew install swiftformat)",
+      "Bash(bash .github/scripts/*)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 .claude/hooks/debug-output-detector.py"
+          }
+        ]
+      }
+    ]
+  }
+}

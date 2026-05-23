@@ -1,0 +1,38 @@
+name: 機能追加
+description: 新機能の追加リクエスト
+title: "feat: "
+labels: ["feature"]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: 機能の説明
+      description: 何を実現したいか
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance-criteria
+    attributes:
+      label: 受け入れ条件
+      description: この機能が完了したと判断できる条件
+      placeholder: |
+        - [ ] 条件1
+        - [ ] 条件2
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: 機能領域
+      options:
+        - コアタスク管理（FR-01〜FR-09）
+        - 検索・整理（FR-10〜FR-12）
+        - 外部タスクインポート（FR-13〜FR-18）
+        - 日報・作業報告（FR-19〜FR-22）
+        - その他
+    validations:
+      required: true
+  - type: textarea
+    id: additional-context
+    attributes:
+      label: 補足情報
