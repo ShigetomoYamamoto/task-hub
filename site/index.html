@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TaskHub — 複数ツールのタスクを一元管理</title>
+  <meta name="description" content="Notion・Google スプレッドシートに分散したタスクを macOS ネイティブで一元管理し、日報・作業報告を自動生成するデスクトップアプリ。">
+  <meta property="og:title" content="TaskHub">
+  <meta property="og:description" content="複数ツールのタスクを、ひとつの画面へ。">
+  <meta property="og:type" content="website">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #ffffff;
+      --bg-secondary: #f5f5f7;
+      --bg-tertiary: #e8e8ed;
+      --text: #1d1d1f;
+      --text-2: #6e6e73;
+      --text-3: #86868b;
+      --accent: #0071e3;
+      --accent-hover: #0077ed;
+      --card-bg: #ffffff;
+      --card-border: rgba(0,0,0,0.08);
+      --nav-bg: rgba(255,255,255,0.82);
+      --success: #34c759;
+      --warning: #ff9f0a;
+      --sh-sm: 0 2px 8px rgba(0,0,0,0.06);
+      --sh: 0 8px 32px rgba(0,0,0,0.10);
+      --sh-lg: 0 24px 64px rgba(0,0,0,0.12);
+      --r: 18px;
+      --r-sm: 10px;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #000000;
+        --bg-secondary: #111111;
+        --bg-tertiary: #1c1c1e;
+        --text: #f5f5f7;
+        --text-2: #98989d;
+        --text-3: #636366;
+        --accent: #2997ff;
+        --accent-hover: #47a5ff;
+        --card-bg: #1c1c1e;
+        --card-border: rgba(255,255,255,0.08);
+        --nav-bg: rgba(0,0,0,0.82);
+        --sh-sm: 0 2px 8px rgba(0,0,0,0.3);
+        --sh: 0 8px 32px rgba(0,0,0,0.4);
+        --sh-lg: 0 24px 64px rgba(0,0,0,0.5);
+      }
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* ── NAV ── */
+    nav {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0 40px; height: 52px;
+      background: var(--nav-bg);
+      backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--card-border);
+    }
+    .nav-logo { font-size: 17px; font-weight: 700; color: var(--text); text-decoration: none; }
+    .nav-links { display: flex; gap: 20px; align-items: center; }
+    .nav-links a { font-size: 14px; color: var(--text-2); text-decoration: none; transition: color .2s; }
+    .nav-links a:hover { color: var(--text); }
+    .nav-badge {
+      font-size: 11px; font-weight: 700; padding: 3px 10px;
+      border-radius: 20px; background: var(--warning); color: #000;
+      letter-spacing: .03em;
+    }
+
+    /* ── HERO ── */
+    .hero {
+      min-height: 100vh;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      text-align: center; padding: 120px 24px 80px;
+      position: relative; overflow: hidden;
+    }
+    .hero::before {
+      content: ''; position: absolute; top: -240px; left: 50%; transform: translateX(-50%);
+      width: 900px; height: 900px;
+      background: radial-gradient(circle, rgba(0,113,227,.10) 0%, transparent 65%);
+      pointer-events: none;
+    }
+    .hero-eyebrow {
+      font-size: 13px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: .10em; color: var(--accent); margin-bottom: 20px;
+    }
+    .hero-title {
+      font-size: clamp(40px, 6vw, 72px); font-weight: 700;
+      line-height: 1.08; letter-spacing: -.03em; max-width: 800px; margin-bottom: 24px;
+    }
+    .hero-title span {
+      background: linear-gradient(135deg, var(--accent) 0%, #34aadc 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    }
+    .hero-sub {
+      font-size: clamp(17px, 2vw, 20px); color: var(--text-2);
+      max-width: 540px; margin-bottom: 40px; line-height: 1.65;
+    }
+    .hero-actions { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; justify-content: center; }
+
+    .btn-primary {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 13px 26px; background: var(--accent); color: #fff;
+      border-radius: 980px; font-size: 15px; font-weight: 600;
+      text-decoration: none; transition: background .2s, transform .12s;
+    }
+    .btn-primary:hover { background: var(--accent-hover); transform: scale(1.02); }
+    .btn-secondary {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 13px 26px; background: transparent; color: var(--accent);
+      border-radius: 980px; font-size: 15px; font-weight: 600;
+      text-decoration: none; border: 1.5px solid var(--accent); transition: all .2s;
+    }
+    .btn-secondary:hover { background: var(--accent); color: #fff; transform: scale(1.02); }
+
+    /* ── APP WINDOW MOCKUP ── */
+    .hero-mockup {
+      margin-top: 64px; width: 100%; max-width: 860px;
+      border-radius: 14px; overflow: hidden;
+      box-shadow: var(--sh-lg), 0 0 0 1px var(--card-border);
+    }
+    .win-bar {
+      background: var(--bg-secondary); padding: 11px 14px;
+      display: flex; align-items: center; gap: 7px;
+      border-bottom: 1px solid var(--card-border);
+    }
+    .tl { width: 12px; height: 12px; border-radius: 50%; }
+    .tl-r { background: #ff5f57; } .tl-y { background: #febc2e; } .tl-g { background: #28c840; }
+    .win-title { flex: 1; text-align: center; font-size: 13px; font-weight: 500; color: var(--text-2); }
+    .win-body { display: flex; height: 380px; background: var(--bg); }
+    .win-sidebar {
+      width: 200px; border-right: 1px solid var(--card-border);
+      padding: 14px 10px; background: var(--bg-secondary); flex-shrink: 0;
+    }
+    .sb-section { margin-bottom: 20px; }
+    .sb-label {
+      font-size: 11px; font-weight: 600; color: var(--text-3);
+      text-transform: uppercase; letter-spacing: .06em;
+      padding: 0 8px; margin-bottom: 4px;
+    }
+    .sb-item {
+      display: flex; align-items: center; gap: 8px;
+      padding: 5px 8px; border-radius: 6px;
+      font-size: 13px; color: var(--text); cursor: default;
+    }
+    .sb-item.active { background: var(--accent); color: #fff; }
+    .sb-count { margin-left: auto; font-size: 11px; color: var(--text-3); }
+    .sb-item.active .sb-count { color: rgba(255,255,255,.7); }
+    .win-main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+    .win-toolbar {
+      display: flex; align-items: center; padding: 10px 18px;
+      border-bottom: 1px solid var(--card-border); gap: 10px;
+    }
+    .tb-title { font-size: 15px; font-weight: 600; }
+    .tb-spacer { flex: 1; }
+    .tb-btn {
+      padding: 4px 12px; border-radius: 6px; font-size: 12px; font-weight: 600;
+      background: var(--accent); color: #fff; border: none; cursor: default;
+    }
+    .task-row {
+      display: flex; align-items: center; gap: 10px;
+      padding: 8px 18px; border-bottom: 1px solid var(--card-border); font-size: 13px;
+    }
+    .task-row:last-child { border-bottom: none; }
+    .chk {
+      width: 15px; height: 15px; border-radius: 50%;
+      border: 1.5px solid var(--card-border); flex-shrink: 0;
+    }
+    .chk.done {
+      background: var(--success); border-color: var(--success);
+      display: flex; align-items: center; justify-content: center;
+      color: #fff; font-size: 9px;
+    }
+    .task-name { flex: 1; }
+    .task-name.done { text-decoration: line-through; color: var(--text-3); }
+    .src {
+      font-size: 11px; padding: 2px 7px; border-radius: 4px;
+      background: var(--bg-tertiary); color: var(--text-2);
+    }
+    .pct { font-size: 11px; color: var(--text-2); width: 30px; text-align: right; }
+    .st {
+      font-size: 11px; padding: 2px 7px; border-radius: 4px;
+    }
+    .st-ip { background: rgba(0,113,227,.12); color: var(--accent); }
+    .st-rv { background: rgba(255,159,10,.12); color: var(--warning); }
+    .st-dn { background: rgba(52,199,89,.12); color: var(--success); }
+
+    /* ── GENERIC SECTION ── */
+    .sec { padding: 96px 24px; max-width: 1080px; margin: 0 auto; }
+    .sec-alt { background: var(--bg-secondary); }
+    .sec-alt .sec-inner { max-width: 1080px; margin: 0 auto; padding: 96px 24px; }
+    .eyebrow {
+      font-size: 12px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: .10em; color: var(--accent);
+      text-align: center; margin-bottom: 12px;
+    }
+    .sec-title {
+      font-size: clamp(28px, 4vw, 48px); font-weight: 700;
+      letter-spacing: -.02em; line-height: 1.1;
+      text-align: center; margin-bottom: 14px;
+    }
+    .sec-desc {
+      font-size: 17px; color: var(--text-2); text-align: center;
+      max-width: 520px; margin: 0 auto 56px; line-height: 1.65;
+    }
+
+    /* ── FEATURE CARDS ── */
+    .feat-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(296px, 1fr)); gap: 18px;
+    }
+    .feat-card {
+      background: var(--card-bg); border: 1px solid var(--card-border);
+      border-radius: var(--r); padding: 30px; box-shadow: var(--sh-sm);
+      transition: transform .2s, box-shadow .2s;
+    }
+    .feat-card:hover { transform: translateY(-2px); box-shadow: var(--sh); }
+    .feat-icon {
+      width: 46px; height: 46px; border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 22px; margin-bottom: 18px;
+    }
+    .feat-title { font-size: 19px; font-weight: 600; margin-bottom: 10px; }
+    .feat-desc { font-size: 14px; color: var(--text-2); line-height: 1.65; }
+
+    /* ── INTEGRATIONS ── */
+    .tools-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px;
+    }
+    .tool-card {
+      background: var(--card-bg); border: 1px solid var(--card-border);
+      border-radius: var(--r-sm); padding: 22px 16px; text-align: center;
+      box-shadow: var(--sh-sm); position: relative; transition: transform .2s;
+    }
+    .tool-card.av:hover { transform: translateY(-2px); }
+    .tool-card.cs { opacity: .55; }
+    .tool-logo { font-size: 38px; margin-bottom: 10px; }
+    .tool-name { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+    .tbadge { font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 20px; }
+    .tbadge-av { background: rgba(52,199,89,.12); color: var(--success); }
+    .tbadge-cs { background: var(--bg-tertiary); color: var(--text-3); }
+
+    /* ── REPORT SECTION ── */
+    .report-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 32px; align-items: start; }
+    .tpl-box {
+      background: var(--card-bg); border: 1px solid var(--card-border);
+      border-radius: var(--r); padding: 28px; box-shadow: var(--sh-sm);
+    }
+    .tpl-label {
+      font-size: 11px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: .06em; color: var(--text-3); margin-bottom: 14px;
+    }
+    .tpl-body {
+      font-family: 'SF Mono', 'Menlo', 'Fira Mono', monospace;
+      font-size: 13px; line-height: 1.9; color: var(--text);
+    }
+    .var { background: rgba(0,113,227,.10); color: var(--accent); padding: 1px 4px; border-radius: 3px; }
+    .steps { display: flex; flex-direction: column; gap: 24px; }
+    .step { display: flex; gap: 16px; align-items: flex-start; }
+    .step-n {
+      width: 34px; height: 34px; border-radius: 50%; background: var(--accent);
+      color: #fff; display: flex; align-items: center; justify-content: center;
+      font-size: 14px; font-weight: 700; flex-shrink: 0;
+    }
+    .step-body { padding-top: 3px; }
+    .step-title { font-size: 16px; font-weight: 600; margin-bottom: 5px; }
+    .step-desc { font-size: 14px; color: var(--text-2); line-height: 1.55; }
+
+    /* ── VARIABLES ── */
+    .vars-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px; }
+    .var-chip {
+      background: var(--card-bg); border: 1px solid var(--card-border);
+      border-radius: 10px; padding: 13px 15px;
+      display: flex; align-items: center; gap: 12px;
+    }
+    .var-code {
+      font-family: 'SF Mono', 'Menlo', monospace; font-size: 11.5px;
+      color: var(--accent); background: rgba(0,113,227,.08);
+      padding: 2px 7px; border-radius: 4px; white-space: nowrap;
+    }
+    .var-desc { font-size: 12px; color: var(--text-2); }
+
+    /* ── TECH STACK ── */
+    .tech-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; }
+    .tech-card {
+      background: var(--card-bg); border: 1px solid var(--card-border);
+      border-radius: var(--r-sm); padding: 22px; text-align: center; box-shadow: var(--sh-sm);
+    }
+    .tech-icon { font-size: 34px; margin-bottom: 10px; }
+    .tech-name { font-size: 15px; font-weight: 600; margin-bottom: 4px; }
+    .tech-detail { font-size: 12px; color: var(--text-2); line-height: 1.5; }
+    .arch-box-wrap {
+      background: var(--card-bg); border: 1px solid var(--card-border);
+      border-radius: var(--r); padding: 36px 28px; margin-top: 48px; box-shadow: var(--sh-sm);
+    }
+    .arch-label {
+      font-size: 11px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: .06em; color: var(--text-3); text-align: center; margin-bottom: 28px;
+    }
+    .arch-row { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 0; row-gap: 12px; }
+    .arch-node {
+      background: var(--bg-secondary); border: 1px solid var(--card-border);
+      border-radius: 8px; padding: 9px 16px; font-size: 13px; font-weight: 600;
+      text-align: center; min-width: 90px;
+    }
+    .arch-node.accent { background: rgba(0,113,227,.10); border-color: rgba(0,113,227,.25); }
+    .arch-arr { padding: 0 6px; color: var(--text-3); font-size: 16px; }
+    .arch-sub { text-align: center; margin-top: 16px; font-size: 13px; color: var(--text-2); }
+
+    /* ── FOOTER ── */
+    footer {
+      border-top: 1px solid var(--card-border);
+      padding: 48px 24px; text-align: center;
+    }
+    .ft-logo { font-size: 20px; font-weight: 700; margin-bottom: 12px; }
+    .ft-links { display: flex; gap: 22px; justify-content: center; margin-bottom: 20px; flex-wrap: wrap; }
+    .ft-links a { font-size: 14px; color: var(--text-2); text-decoration: none; transition: color .2s; }
+    .ft-links a:hover { color: var(--text); }
+    .ft-copy { font-size: 12px; color: var(--text-3); }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 768px) {
+      nav { padding: 0 18px; }
+      .nav-links a { display: none; }
+      .win-sidebar { display: none; }
+      .report-grid { grid-template-columns: 1fr; }
+    }
+
+    /* ── ANIMATIONS ── */
+    .fi { opacity: 0; transform: translateY(18px); transition: opacity .6s ease, transform .6s ease; }
+    .fi.vis { opacity: 1; transform: none; }
+  </style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <a class="nav-logo" href="#">TaskHub</a>
+  <div class="nav-links">
+    <span class="nav-badge">開発中</span>
+    <a href="#features">機能</a>
+    <a href="#integrations">連携</a>
+    <a href="#report">日報生成</a>
+    <a href="https://github.com/ShigetomoYamamoto/task-hub">GitHub ↗</a>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <p class="hero-eyebrow">macOS ネイティブ &nbsp;·&nbsp; ローカルファースト</p>
+  <h1 class="hero-title">複数ツールのタスクを、<br><span>ひとつ</span>の画面へ。</h1>
+  <p class="hero-sub">Notion や Google スプレッドシートに散らばったタスクを一元管理し、日報・作業報告を自動生成するデスクトップアプリ。</p>
+  <div class="hero-actions">
+    <a href="https://github.com/ShigetomoYamamoto/task-hub" class="btn-primary">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+      GitHub で見る
+    </a>
+    <a href="#features" class="btn-secondary">機能を見る →</a>
+  </div>
+
+  <div class="hero-mockup fi">
+    <div class="win-bar">
+      <div class="tl tl-r"></div>
+      <div class="tl tl-y"></div>
+      <div class="tl tl-g"></div>
+      <span class="win-title">TaskHub</span>
+    </div>
+    <div class="win-body">
+      <div class="win-sidebar">
+        <div class="sb-section">
+          <div class="sb-label">固定</div>
+          <div class="sb-item"><span>📥</span> インボックス <span class="sb-count">5</span></div>
+          <div class="sb-item active"><span>📅</span> 今日 <span class="sb-count">3</span></div>
+        </div>
+        <div class="sb-section">
+          <div class="sb-label">プロジェクト</div>
+          <div class="sb-item"><span>📁</span> DWAI</div>
+          <div class="sb-item"><span>📁</span> AI エージェント</div>
+          <div class="sb-item"><span>📁</span> クライアント A</div>
+        </div>
+      </div>
+      <div class="win-main">
+        <div class="win-toolbar">
+          <span class="tb-title">今日</span>
+          <span class="tb-spacer"></span>
+          <button class="tb-btn">⟳ 同期</button>
+        </div>
+        <div>
+          <div class="task-row">
+            <div class="chk done">✓</div>
+            <span class="task-name done">Vercel について調査</span>
+            <span class="src">Notion</span>
+            <span class="pct">100%</span>
+            <span class="st st-dn">完了</span>
+          </div>
+          <div class="task-row">
+            <div class="chk"></div>
+            <span class="task-name">専用アプリ開発</span>
+            <span class="src">Notion</span>
+            <span class="pct">30%</span>
+            <span class="st st-ip">進行中</span>
+          </div>
+          <div class="task-row">
+            <div class="chk"></div>
+            <span class="task-name">週次レポート作成</span>
+            <span class="src">GSheet</span>
+            <span class="pct">0%</span>
+            <span class="st st-rv">レビュー中</span>
+          </div>
+          <div class="task-row">
+            <div class="chk"></div>
+            <span class="task-name">API 設計レビュー</span>
+            <span class="src">手動</span>
+            <span class="pct">50%</span>
+            <span class="st st-ip">進行中</span>
+          </div>
+          <div class="task-row">
+            <div class="chk"></div>
+            <span class="task-name">ドキュメント更新</span>
+            <span class="src">手動</span>
+            <span class="pct">20%</span>
+            <span class="st st-ip">進行中</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<div class="sec-alt" id="features">
+  <div class="sec-inner">
+    <p class="eyebrow">機能</p>
+    <h2 class="sec-title">シンプルに、もっと効率よく。</h2>
+    <p class="sec-desc">タスク管理の本質に集中した機能セット。複雑さを排除し、日常の報告作業を省力化します。</p>
+    <div class="feat-grid">
+      <div class="feat-card fi">
+        <div class="feat-icon" style="background:rgba(0,113,227,.10)">🎯</div>
+        <h3 class="feat-title">タスクの一元管理</h3>
+        <p class="feat-desc">Notion・Google スプレッドシートに分散したタスクをひとつの画面で確認・更新。ツールを横断した「自分ビュー」を実現します。</p>
+      </div>
+      <div class="feat-card fi">
+        <div class="feat-icon" style="background:rgba(52,199,89,.10)">📶</div>
+        <h3 class="feat-title">ローカルファースト</h3>
+        <p class="feat-desc">SwiftData によるオフライン完全動作。ネットワーク不在でもタスクの閲覧・編集・レポート生成がすべて動きます。</p>
+      </div>
+      <div class="feat-card fi">
+        <div class="feat-icon" style="background:rgba(255,159,10,.10)">📝</div>
+        <h3 class="feat-title">日報・作業報告の自動生成</h3>
+        <p class="feat-desc">テンプレートと差し込み変数で日報を 3 ステップで生成。クリップボードか Markdown ファイルとして出力できます。</p>
+      </div>
+      <div class="feat-card fi">
+        <div class="feat-icon" style="background:rgba(175,82,222,.10)">🗂️</div>
+        <h3 class="feat-title">プロジェクト階層管理</h3>
+        <p class="feat-desc">プロジェクト → リスト → タスク → サブタスクの 4 階層で整理。ステータス・進捗度・優先度・作業時間を一元管理します。</p>
+      </div>
+      <div class="feat-card fi">
+        <div class="feat-icon" style="background:rgba(255,45,85,.10)">🔐</div>
+        <h3 class="feat-title">セキュアな設計</h3>
+        <p class="feat-desc">API トークンや OAuth 認証情報は macOS Keychain で保護。コードにはシークレットをハードコードせず、設定画面ではマスク表示します。</p>
+      </div>
+      <div class="feat-card fi">
+        <div class="feat-icon" style="background:rgba(0,199,190,.10)">⌨️</div>
+        <h3 class="feat-title">キーボード中心の操作</h3>
+        <p class="feat-desc">⌘N・Space・⌘F・⌘T など主要操作はすべてショートカットに対応。マウスなしでも日常業務が完結します。</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- INTEGRATIONS -->
+<section class="sec" id="integrations">
+  <p class="eyebrow">インテグレーション</p>
+  <h2 class="sec-title">使っているツールと、つながる。</h2>
+  <p class="sec-desc">MVP では Notion と Google スプレッドシートに対応。プラグイン型設計により、今後のツール追加も容易です。</p>
+  <div class="tools-grid">
+    <div class="tool-card av fi">
+      <div class="tool-logo">
+        <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
+          <rect width="40" height="40" rx="8" fill="var(--card-bg)" stroke="var(--card-border)"/>
+          <text x="50%" y="56%" dominant-baseline="middle" text-anchor="middle" font-size="22" font-weight="800" fill="var(--text)">N</text>
+        </svg>
+      </div>
+      <div class="tool-name">Notion</div>
+      <span class="tbadge tbadge-av">実装済み</span>
+    </div>
+    <div class="tool-card av fi">
+      <div class="tool-logo">
+        <svg width="40" height="40" viewBox="0 0 40 40" fill="none">
+          <rect width="40" height="40" rx="8" fill="#1a9e55"/>
+          <rect x="6" y="8" width="28" height="24" rx="2" fill="white" opacity=".15"/>
+          <line x1="6" y1="15" x2="34" y2="15" stroke="white" stroke-width="1.2" opacity=".6"/>
+          <line x1="6" y1="21" x2="34" y2="21" stroke="white" stroke-width="1.2" opacity=".6"/>
+          <line x1="6" y1="27" x2="34" y2="27" stroke="white" stroke-width="1.2" opacity=".6"/>
+          <line x1="16" y1="8" x2="16" y2="32" stroke="white" stroke-width="1.2" opacity=".6"/>
+          <line x1="26" y1="8" x2="26" y2="32" stroke="white" stroke-width="1.2" opacity=".6"/>
+        </svg>
+      </div>
+      <div class="tool-name">Google スプレッドシート</div>
+      <span class="tbadge tbadge-av">実装済み</span>
+    </div>
+    <div class="tool-card cs fi">
+      <div class="tool-logo" style="font-size:32px;line-height:40px">🔵</div>
+      <div class="tool-name">JIRA</div>
+      <span class="tbadge tbadge-cs">Coming Soon</span>
+    </div>
+    <div class="tool-card cs fi">
+      <div class="tool-logo" style="font-size:32px;line-height:40px">⚡</div>
+      <div class="tool-name">Linear</div>
+      <span class="tbadge tbadge-cs">Coming Soon</span>
+    </div>
+    <div class="tool-card cs fi">
+      <div class="tool-logo" style="font-size:32px;line-height:40px">🟣</div>
+      <div class="tool-name">Asana</div>
+      <span class="tbadge tbadge-cs">Coming Soon</span>
+    </div>
+    <div class="tool-card cs fi">
+      <div class="tool-logo" style="font-size:32px;line-height:40px">🐙</div>
+      <div class="tool-name">GitHub Issues</div>
+      <span class="tbadge tbadge-cs">Coming Soon</span>
+    </div>
+  </div>
+</section>
+
+<!-- REPORT GENERATION -->
+<div class="sec-alt" id="report">
+  <div class="sec-inner">
+    <p class="eyebrow">日報生成</p>
+    <h2 class="sec-title">日報を、3 ステップで。</h2>
+    <p class="sec-desc">テンプレートと差し込み変数でレポートを瞬時に生成。タスクデータが自動で埋まります。</p>
+    <div class="report-grid">
+      <div>
+        <div class="tpl-box fi">
+          <div class="tpl-label">テンプレート — 業務日報</div>
+          <div class="tpl-body">
+            【<span class="var">{{date}}</span>業務報告】<br>
+            ■今日やったこと: 計<span class="var">{{today.totalHours}}</span>h<br>
+            <span class="var">{{today.workLog}}</span><br>
+            <br>
+            ■勉強になったこと<br>
+            <br><br>
+            ■明日やること<br>
+            <span class="var">{{next.tasks}}</span><br>
+            <br>
+            ■連絡事項<br>
+          </div>
+        </div>
+      </div>
+      <div class="steps">
+        <div class="step fi">
+          <div class="step-n">1</div>
+          <div class="step-body">
+            <div class="step-title">テンプレートを選ぶ</div>
+            <div class="step-desc">「作業開始報告」「業務日報」など用途に合わせたテンプレートを選択。自分専用のテンプレートも作成できます。</div>
+          </div>
+        </div>
+        <div class="step fi">
+          <div class="step-n">2</div>
+          <div class="step-body">
+            <div class="step-title">「生成」を押す</div>
+            <div class="step-desc">今日の作業ログ・進行中タスク・明日の予定が自動で差し込まれてプレビューに表示。手動で微調整することも可能。</div>
+          </div>
+        </div>
+        <div class="step fi">
+          <div class="step-n">3</div>
+          <div class="step-body">
+            <div class="step-title">コピーして送信</div>
+            <div class="step-desc">クリップボードにコピーしてそのまま貼り付け、または Markdown ファイルとして保存。レポート履歴に自動保存されます。</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- VARIABLES -->
+<section class="sec">
+  <p class="eyebrow">差し込み変数</p>
+  <h2 class="sec-title">12 種類の変数で、何でも書ける。</h2>
+  <p class="sec-desc">クリックするだけでカーソル位置に挿入。シンタックスを覚えなくても自由にテンプレートを作れます。</p>
+  <div class="vars-grid">
+    <div class="var-chip fi"><span class="var-code">{{date}}</span><span class="var-desc">生成日</span></div>
+    <div class="var-chip fi"><span class="var-code">{{today.totalHours}}</span><span class="var-desc">今日の合計作業時間</span></div>
+    <div class="var-chip fi"><span class="var-code">{{today.workLog}}</span><span class="var-desc">今日の作業ログ（工数付き）</span></div>
+    <div class="var-chip fi"><span class="var-code">{{today.plan}}</span><span class="var-desc">今日の予定タスク一覧</span></div>
+    <div class="var-chip fi"><span class="var-code">{{today.completed}}</span><span class="var-desc">今日完了したタスク</span></div>
+    <div class="var-chip fi"><span class="var-code">{{today.inProgress}}</span><span class="var-desc">今日作業中のタスク</span></div>
+    <div class="var-chip fi"><span class="var-code">{{assigned.tasks}}</span><span class="var-desc">担当タスク一覧（進捗%付き）</span></div>
+    <div class="var-chip fi"><span class="var-code">{{next.tasks}}</span><span class="var-desc">次にやるタスク（期限順）</span></div>
+    <div class="var-chip fi"><span class="var-code">{{projects.summary}}</span><span class="var-desc">プロジェクト別進捗サマリー</span></div>
+    <div class="var-chip fi"><span class="var-code">{{period.completed}}</span><span class="var-desc">期間内に完了したタスク</span></div>
+    <div class="var-chip fi"><span class="var-code">{{period.start}}</span><span class="var-desc">対象期間の開始日</span></div>
+    <div class="var-chip fi"><span class="var-code">{{period.end}}</span><span class="var-desc">対象期間の終了日</span></div>
+  </div>
+</section>
+
+<!-- TECH STACK -->
+<div class="sec-alt">
+  <div class="sec-inner">
+    <p class="eyebrow">技術スタック</p>
+    <h2 class="sec-title">Apple 標準技術で、堅牢に。</h2>
+    <p class="sec-desc">サードパーティ依存を最小化。OS レベルの API を活用したセキュアで高性能な設計です。</p>
+    <div class="tech-grid">
+      <div class="tech-card fi">
+        <div class="tech-icon">🦅</div>
+        <div class="tech-name">Swift 5.9+</div>
+        <div class="tech-detail">Concurrency · Actor · async/await</div>
+      </div>
+      <div class="tech-card fi">
+        <div class="tech-icon">🖼️</div>
+        <div class="tech-name">SwiftUI</div>
+        <div class="tech-detail">NavigationSplitView · @Observable</div>
+      </div>
+      <div class="tech-card fi">
+        <div class="tech-icon">💾</div>
+        <div class="tech-name">SwiftData</div>
+        <div class="tech-detail">@Model マクロ · ローカル永続化</div>
+      </div>
+      <div class="tech-card fi">
+        <div class="tech-icon">🔑</div>
+        <div class="tech-name">Keychain Services</div>
+        <div class="tech-detail">Security.framework · 認証情報保護</div>
+      </div>
+      <div class="tech-card fi">
+        <div class="tech-icon">🔐</div>
+        <div class="tech-name">AuthenticationServices</div>
+        <div class="tech-detail">OAuth 2.0 + PKCE · ASWebAuthSession</div>
+      </div>
+      <div class="tech-card fi">
+        <div class="tech-icon">🖥️</div>
+        <div class="tech-name">macOS 14+ Universal</div>
+        <div class="tech-detail">arm64 + x86_64 · Sonoma 以上</div>
+      </div>
+    </div>
+    <div class="arch-box-wrap fi">
+      <div class="arch-label">アーキテクチャ — MVVM + Repository + Service</div>
+      <div class="arch-row">
+        <div class="arch-node accent">View<br><small style="font-weight:400;font-size:11px;color:var(--text-2)">SwiftUI</small></div>
+        <span class="arch-arr">→</span>
+        <div class="arch-node">ViewModel<br><small style="font-weight:400;font-size:11px;color:var(--text-2)">@Observable</small></div>
+        <span class="arch-arr">→</span>
+        <div class="arch-node">Service<br><small style="font-weight:400;font-size:11px;color:var(--text-2)">actor</small></div>
+        <span class="arch-arr">→</span>
+        <div class="arch-node">Repository<br><small style="font-weight:400;font-size:11px;color:var(--text-2)">SwiftData</small></div>
+      </div>
+      <div class="arch-sub">Service ↔ IntegrationProvider → HTTPClient &nbsp;/&nbsp; KeychainStore</div>
+    </div>
+  </div>
+</div>
+
+<!-- FOOTER -->
+<footer>
+  <div class="ft-logo">TaskHub</div>
+  <div class="ft-links">
+    <a href="https://github.com/ShigetomoYamamoto/task-hub">GitHub</a>
+    <a href="https://github.com/ShigetomoYamamoto/task-hub/blob/main/docs/REQUIREMENTS.md">要件定義</a>
+    <a href="https://github.com/ShigetomoYamamoto/task-hub/blob/main/docs/DESIGN.md">設計書</a>
+    <a href="https://github.com/ShigetomoYamamoto/task-hub/issues">Issues</a>
+  </div>
+  <p class="ft-copy">© 2026 TaskHub &nbsp;·&nbsp; macOS 14 Sonoma 以上 &nbsp;·&nbsp; 個人開発中</p>
+</footer>
+
+<script>
+  const obs = new IntersectionObserver((entries) => {
+    entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('vis'); });
+  }, { threshold: 0.08, rootMargin: '0px 0px -30px 0px' });
+  document.querySelectorAll('.fi').forEach(el => obs.observe(el));
+</script>
+</body>
+</html>
