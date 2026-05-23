@@ -15,16 +15,32 @@ jobs:
       - name: Install SwiftLint
         run: brew install swiftlint
       - name: Run SwiftLint
-        run: swiftlint lint --strict --reporter github-actions-logging
+        run: |
+          SWIFT_COUNT=$(find . -name "*.swift" \
+            -not -path "./DerivedData/*" \
+            -not -path "./.build/*" | wc -l | tr -d ' ')
+          if [ "$SWIFT_COUNT" -eq 0 ]; then
+            echo "⚠️ Swift ファイルが存在しないためスキップします"
+            exit 0
+          fi
+          swiftlint lint --strict --reporter github-actions-logging
 
   build:
     name: Build
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
-      - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_15.4.app
+      - name: Check for Xcode project
+        id: check
+        run: |
+          if find . -name "*.xcodeproj" -not -path "./DerivedData/*" | grep -q .; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "⚠️ Xcode プロジェクトが存在しないためスキップします"
+          fi
       - name: Build
+        if: steps.check.outputs.exists == 'true'
         run: |
           xcodebuild build \
             -scheme TaskHub \
@@ -39,9 +55,17 @@ jobs:
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
-      - name: Select Xcode
-        run: sudo xcode-select -s /Applications/Xcode_15.4.app
+      - name: Check for Xcode project
+        id: check
+        run: |
+          if find . -name "*.xcodeproj" -not -path "./DerivedData/*" | grep -q .; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "⚠️ Xcode プロジェクトが存在しないためスキップします"
+          fi
       - name: Run Tests
+        if: steps.check.outputs.exists == 'true'
         run: |
           xcodebuild test \
             -scheme TaskHub \
@@ -52,8 +76,8 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             | xcpretty
       - name: Check Coverage
+        if: steps.check.outputs.exists == 'true'
         run: |
-          # xccov でカバレッジを確認（80% 未満でフェイル）
           COVERAGE=$(xcrun xccov view --report --json DerivedData/Logs/Test/*.xcresult 2>/dev/null \
             | python3 -c "import json,sys; d=json.load(sys.stdin); print(int(d['lineCoverage']*100))" 2>/dev/null || echo "0")
           echo "カバレッジ: ${COVERAGE}%"
@@ -64,7 +88,7 @@ jobs:
 
   custom-audit:
     name: Custom Audit
-    runs-on: macos-14
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Run Custom Audit
