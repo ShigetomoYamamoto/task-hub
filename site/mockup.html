@@ -386,14 +386,117 @@
     }
     .screen-desc strong { color: var(--text); }
 
-    /* RESPONSIVE */
+    /* ─── MOBILE COMPONENTS (hidden on desktop) ──────────────── */
+    .det-close-btn {
+      display: none;
+      align-items: center; gap: 6px;
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      background: var(--win-bar);
+      font-size: 14px; font-weight: 500; color: var(--accent);
+      cursor: pointer;
+      border-top: none; border-left: none; border-right: none;
+      width: 100%; text-align: left; flex-shrink: 0;
+      transition: opacity .15s;
+    }
+    .det-close-btn:hover { opacity: .75; }
+
+    .mobile-nav {
+      display: none;
+      background: var(--win-bar);
+      border-top: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .mobile-nav-item {
+      flex: 1;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      padding: 7px 4px;
+      font-size: 10px; color: var(--text-2);
+      cursor: pointer; gap: 3px;
+      border: none; background: transparent;
+      transition: color .15s; min-height: 54px;
+    }
+    .mobile-nav-item.active { color: var(--accent); }
+    .mobile-nav-item-icon { font-size: 20px; line-height: 1; }
+
+    /* ─── TABLET (≤ 900px) ────────────────────────────────── */
     @media (max-width: 900px) {
-      .detail-pane { display: none !important; }
+      .detail-pane { display: none; }
       .sidebar { width: 160px; }
     }
+
+    /* ─── MOBILE (≤ 640px) ────────────────────────────────── */
     @media (max-width: 640px) {
+      /* Page shell */
+      .page-header {
+        height: 48px; padding: 0 14px;
+        flex-wrap: nowrap; gap: 6px;
+      }
+      .page-screens { display: none; }
+      .page-meta { display: none; }
+      .page-body {
+        padding: 0;
+        height: calc(100dvh - 48px);
+        height: calc(100vh - 48px); /* fallback */
+        height: calc(100dvh - 48px);
+        display: flex; flex-direction: column; align-items: stretch;
+      }
+      .mock-label { display: none; }
+      .screen-desc { display: none; }
+
+      /* App window fills remaining viewport */
+      .app-win {
+        flex: 1; max-width: 100%;
+        border-radius: 0; box-shadow: none;
+        display: flex; flex-direction: column;
+        overflow: hidden;
+      }
+
+      /* App body: grow to fill */
+      .app-body { height: auto; flex: 1; min-height: 0; overflow: hidden; }
+
+      /* Sidebar → hidden, replaced by bottom nav */
       .sidebar { display: none; }
+
+      /* Detail pane: slide-in overlay */
+      .detail-pane {
+        display: flex !important; flex-direction: column;
+        position: fixed; top: 0; right: -100%;
+        width: 100%; height: 100%; z-index: 100;
+        border-left: none; overflow-y: auto;
+        transition: right .3s cubic-bezier(.4,0,.2,1);
+      }
+      .detail-pane.slide-in {
+        right: 0;
+        box-shadow: -8px 0 32px rgba(0,0,0,.2);
+      }
+
+      /* Show mobile-only elements */
+      .mobile-nav { display: flex; }
+      .det-close-btn { display: flex; }
+
+      /* Titlebar: hide macOS traffic lights */
+      .tl-group { display: none; }
+
+      /* Toolbar: compact */
+      .toolbar { padding: 6px 10px; gap: 6px; }
+      .tb-search { display: none; }
+
+      /* Filter strip: horizontal scroll */
+      .filter-strip {
+        overflow-x: auto; -webkit-overflow-scrolling: touch;
+        scrollbar-width: none; flex-wrap: nowrap; padding: 4px 10px;
+      }
+      .filter-strip::-webkit-scrollbar { display: none; }
+
+      /* Task rows: touch-friendly */
+      .task-row { min-height: 48px; padding: 10px 12px; gap: 8px; }
+      .chk { width: 20px; height: 20px; }
+      .chk.checked::after { font-size: 11px; }
       .prog-wrap, .due-date { display: none; }
+      .src-badge { font-size: 9px; padding: 1px 5px; }
+      .st-badge { font-size: 9px; padding: 2px 6px; }
     }
   </style>
 </head>
@@ -507,6 +610,10 @@
 
       <!-- DETAIL PANE -->
       <div class="detail-pane" id="detailPane">
+        <button class="det-close-btn" onclick="closeDetail()">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none"><path d="M11 3L6 8l5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          タスク一覧に戻る
+        </button>
         <div id="detailContent">
           <div style="padding:40px 20px;text-align:center;color:var(--text-3);font-size:13px">
             タスクを選択すると<br>詳細が表示されます
@@ -515,6 +622,25 @@
       </div>
 
     </div><!-- app-body -->
+
+    <!-- Mobile Bottom Nav -->
+    <nav class="mobile-nav" id="mobileNav">
+      <button class="mobile-nav-item" id="mbn-inbox" onclick="switchScreen('inbox',null)">
+        <span class="mobile-nav-item-icon">📥</span><span>Inbox</span>
+      </button>
+      <button class="mobile-nav-item active" id="mbn-today" onclick="switchScreen('today',null)">
+        <span class="mobile-nav-item-icon">📅</span><span>今日</span>
+      </button>
+      <button class="mobile-nav-item" id="mbn-project" onclick="switchScreen('project',null)">
+        <span class="mobile-nav-item-icon">📁</span><span>AI課題</span>
+      </button>
+      <button class="mobile-nav-item" id="mbn-dwai" onclick="switchScreen('dwai',null)">
+        <span class="mobile-nav-item-icon">📁</span><span>DWAI</span>
+      </button>
+      <button class="mobile-nav-item" id="mbn-client" onclick="switchScreen('client',null)">
+        <span class="mobile-nav-item-icon">📁</span><span>Client</span>
+      </button>
+    </nav>
   </div><!-- app-win -->
 
   <div class="screen-desc" id="screenDesc">
@@ -693,6 +819,17 @@ function selectTask(id) {
     r.classList.toggle('selected', parseInt(r.dataset.id) === id);
   });
   renderDetail(id);
+  if (window.innerWidth <= 640) {
+    document.getElementById('detailPane').classList.add('slide-in');
+    document.body.style.overflow = 'hidden';
+  }
+}
+
+function closeDetail() {
+  document.getElementById('detailPane').classList.remove('slide-in');
+  document.body.style.overflow = '';
+  selectedId = null;
+  document.querySelectorAll('.task-row').forEach(r => r.classList.remove('selected'));
 }
 
 function renderDetail(id) {
@@ -786,6 +923,15 @@ function switchScreen(name, btnEl) {
   });
   const map = {today:'sb-today',inbox:'sb-inbox',project:'sb-project',dwai:'sb-dwai',client:'sb-client'};
   if (map[name]) document.getElementById(map[name])?.classList.add('active');
+  // update mobile nav
+  ['mbn-inbox','mbn-today','mbn-project','mbn-dwai','mbn-client'].forEach(id => {
+    document.getElementById(id)?.classList.remove('active');
+  });
+  const mobileMap = {today:'mbn-today',inbox:'mbn-inbox',project:'mbn-project',dwai:'mbn-dwai',client:'mbn-client'};
+  if (mobileMap[name]) document.getElementById(mobileMap[name])?.classList.add('active');
+  // close detail overlay on screen switch
+  document.getElementById('detailPane').classList.remove('slide-in');
+  document.body.style.overflow = '';
   // update top screen buttons
   document.querySelectorAll('.scr-btn').forEach(b => b.classList.remove('active'));
   if (btnEl) btnEl.classList.add('active');
