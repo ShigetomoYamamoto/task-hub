@@ -296,7 +296,7 @@ As a ユーザー, I want to 同期ボタン1つで有効な全接続からタ�
 So that ツールや接続先ごとに操作せず一度で最新状態を取り込める
 
 受け入れ基準:
-- ツールバーの「同期」ボタン押下で、サーバー側で有効な全接続への取得を並列実行する
+- ツールバーの「同期」ボタン押下で、サーバー側で有効な全接続への取得を順次実行する（1接続ずつ処理・Vercel Hobby の実行時間制限対応のため。DESIGN.md ADR-004 参照）
 - 各接続は「自分の識別子」を使い、自分にアサインされたタスクのみを取得する
   - Notion: People プロパティに自分の Notion ユーザー ID が含まれるページのみ取得
   - Google スプレッドシート: 担当者列に自分の名前 or メールが含まれる行のみ取得
@@ -635,17 +635,17 @@ So that 日常の報告作業を最小限の操作で完了できる
 | R8 | Google スプレッドシートの列フォーマット多様性 | 中 | 接続設定で列マッピング UI を提供 |
 | R9 | クラウド DB へのデータ集中によるベンダーロックイン | 低 | JSON エクスポート / インポートで脱出経路確保 |
 
-### 5.2 未解決の質問（設計フェーズで決定）
+### 5.2 未解決の質問（すべて設計フェーズで解決済み — DESIGN.md §0 参照）
 
-| # | 項目 | 期限 |
-|---|------|-----|
-| Q1 | アプリ自体のアクセス制御方式（プラットフォーム認証 / シンプルパスワード / Magic Link 等から選択） | 設計フェーズ |
-| Q2 | リアルタイム同期（PC ↔ スマホ）方式（Realtime 購読 / SSE / ポーリング / 手動リロード） | 設計フェーズ |
-| Q3 | 同期ジョブの実行方式（同期レスポンス内 / バックグラウンドジョブ） | 設計フェーズ |
-| Q4 | デプロイ先（Vercel / Cloudflare Pages / その他） | 設計フェーズ |
-| Q5 | ホスティング費用（無料枠優先 / 有料許容） | 設計フェーズ |
-| Q6 | クラウド DB の具体機構（Supabase Postgres / その他） | 設計フェーズ |
-| Q7 | 認証情報の暗号化ストレージの具体機構 | 設計フェーズ |
+| # | 項目 | 決定内容 |
+|---|------|---------|
+| Q1 | アプリ自体のアクセス制御方式 | Supabase Auth Magic Link + ALLOWED_EMAILS allowlist（DESIGN.md ADR-002） |
+| Q2 | リアルタイム同期（PC ↔ スマホ）方式 | Supabase Realtime (Postgres Changes)（DESIGN.md ADR-005） |
+| Q3 | 同期ジョブの実行方式 | Vercel Cron + 自前 SyncRun テーブル（Inngest は MVP では不採用）（DESIGN.md ADR-004） |
+| Q4 | デプロイ先 | Vercel Hobby（DESIGN.md §1） |
+| Q5 | ホスティング費用 | Supabase Free + Vercel Hobby（無料枠優先）（DESIGN.md ADR-001） |
+| Q6 | クラウド DB の具体機構 | Supabase Postgres + Prisma 5（DESIGN.md ADR-001, ADR-003） |
+| Q7 | 認証情報の暗号化ストレージ | Supabase Vault (pgsodium)（DESIGN.md §7.3） |
 
 ---
 

@@ -532,7 +532,60 @@ CREATE POLICY "own rows" ON projects
   FOR ALL TO authenticated
   USING (user_id = auth.uid())
   WITH CHECK (user_id = auth.uid());
--- 同様のポリシーを他テーブルにも作成
+
+CREATE POLICY "own rows" ON task_lists
+  FOR ALL TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+CREATE POLICY "own rows" ON tasks
+  FOR ALL TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+-- subtasks / task_tags は user_id を持たないため JOIN で制御
+CREATE POLICY "own via task" ON subtasks
+  FOR ALL TO authenticated
+  USING (EXISTS (SELECT 1 FROM tasks WHERE tasks.id = subtasks.task_id AND tasks.user_id = auth.uid()));
+
+CREATE POLICY "own via task" ON task_tags
+  FOR ALL TO authenticated
+  USING (EXISTS (SELECT 1 FROM tasks WHERE tasks.id = task_tags.task_id AND tasks.user_id = auth.uid()));
+
+CREATE POLICY "own rows" ON tags
+  FOR ALL TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+CREATE POLICY "own rows" ON connections
+  FOR ALL TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+-- sync_records は connection 経由でユーザーを判定
+CREATE POLICY "own via connection" ON sync_records
+  FOR ALL TO authenticated
+  USING (EXISTS (SELECT 1 FROM connections WHERE connections.id = sync_records.connection_id AND connections.user_id = auth.uid()));
+
+CREATE POLICY "own rows" ON sync_runs
+  FOR ALL TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+CREATE POLICY "own rows" ON report_templates
+  FOR ALL TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+CREATE POLICY "own rows" ON report_history
+  FOR ALL TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+CREATE POLICY "own row" ON user_settings
+  FOR ALL TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
 
 -- 4) インボックス保護: 削除・リネーム禁止
 CREATE OR REPLACE FUNCTION protect_inbox() RETURNS trigger AS $$
