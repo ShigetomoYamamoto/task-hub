@@ -1,56 +1,41 @@
-# Xcode
-DerivedData/
-*.xcuserstate
-*.xcscmblueprint
-xcuserdata/
-*.xccheckout
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
-# Build
-.build/
-build/
-*.o
-*.d
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
 
-# Swift Package Manager
-.swiftpm/
-Package.resolved
+# testing
+/coverage
 
-# macOS
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
 .DS_Store
-.AppleDouble
-.LSOverride
-Icon?
-._*
-.Spotlight-V100
-.Trashes
-
-# Credentials & Secrets
-.env
-.env.local
 *.pem
-*.key
-*.secret
-*.p12
-*.mobileprovision
 
-# Archive / Distribution
-*.dmg
-*.pkg
-*.ipa
-*.xcarchive
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
 
-# Editor
-*.swp
-*.swo
-*~
+# env files (can opt-in for committing if needed)
+.env*
 
-# Test results
-TestResults/
-*.xcresult
+# vercel
+.vercel
 
-# Coverage
-*.lcov
-coverage/
-
-# Temp
-/tmp/
+# typescript
+*.tsbuildinfo
+next-env.d.ts
