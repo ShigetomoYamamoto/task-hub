@@ -118,22 +118,6 @@ pnpm prisma studio  # Prisma Studio（DB GUI）
 
 ---
 
-## 外部サービス連携
-
-### Google スプレッドシート
-
-1. [Google Cloud Console](https://console.cloud.google.com) で OAuth 2.0 クライアント ID を作成
-2. 承認済みリダイレクト URI に `{APP_BASE_URL}/api/auth/callback/google` を追加
-3. `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` を `.env.local` に設定
-
-### Notion
-
-1. [Notion Integrations](https://www.notion.so/my-integrations) で Integration を作成
-2. 同期したいデータベースページで Integration を「接続」
-3. アプリ内の「接続」画面から Notion を追加し API キーを入力
-
----
-
 ## ライセンス
 
 Private — 個人利用のみ。
