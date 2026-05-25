@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>TaskHub — 複数ツールのタスクを一元管理</title>
-  <meta name="description" content="Notion・Google スプレッドシートに分散したタスクを macOS ネイティブで一元管理し、日報・作業報告を自動生成するデスクトップアプリ。">
+  <meta name="description" content="Notion・Google スプレッドシートに分散したタスクを Web で一元管理し、日報・作業報告を自動生成する個人向けタスク管理 SaaS。">
   <meta property="og:title" content="TaskHub">
   <meta property="og:description" content="複数ツールのタスクを、ひとつの画面へ。">
   <meta property="og:type" content="website">
@@ -125,20 +125,24 @@
     }
     .btn-secondary:hover { background: var(--accent); color: #fff; transform: scale(1.02); }
 
-    /* ── APP WINDOW MOCKUP ── */
+    /* ── BROWSER MOCKUP ── */
     .hero-mockup {
       margin-top: 64px; width: 100%; max-width: 860px;
       border-radius: 14px; overflow: hidden;
       box-shadow: var(--sh-lg), 0 0 0 1px var(--card-border);
     }
     .win-bar {
-      background: var(--bg-secondary); padding: 11px 14px;
-      display: flex; align-items: center; gap: 7px;
+      background: var(--bg-secondary); padding: 10px 14px;
+      display: flex; align-items: center; gap: 8px;
       border-bottom: 1px solid var(--card-border);
     }
     .tl { width: 12px; height: 12px; border-radius: 50%; }
     .tl-r { background: #ff5f57; } .tl-y { background: #febc2e; } .tl-g { background: #28c840; }
-    .win-title { flex: 1; text-align: center; font-size: 13px; font-weight: 500; color: var(--text-2); }
+    .win-url {
+      flex: 1; background: var(--bg-tertiary); border-radius: 6px;
+      padding: 4px 12px; font-size: 12px; color: var(--text-3);
+      text-align: center; max-width: 360px; margin: 0 auto;
+    }
     .win-body { display: flex; height: 380px; background: var(--bg); }
     .win-sidebar {
       width: 200px; border-right: 1px solid var(--card-border);
@@ -358,24 +362,24 @@
 
 <!-- HERO -->
 <section class="hero">
-  <p class="hero-eyebrow">macOS ネイティブ &nbsp;·&nbsp; ローカルファースト</p>
+  <p class="hero-eyebrow">個人向け SaaS &nbsp;·&nbsp; マルチデバイス対応</p>
   <h1 class="hero-title">複数ツールのタスクを、<br><span>ひとつ</span>の画面へ。</h1>
-  <p class="hero-sub">Notion や Google スプレッドシートに散らばったタスクを一元管理し、日報・作業報告を自動生成するデスクトップアプリ。</p>
+  <p class="hero-sub">Notion や Google スプレッドシートに散らばったタスクを一元管理し、日報・作業報告を自動生成する Web アプリ。PC でもスマホでも、どこからでもアクセスできます。</p>
   <div class="hero-actions">
     <a href="https://github.com/ShigetomoYamamoto/task-hub" class="btn-primary">
-      <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
       GitHub で見る
     </a>
     <a href="#features" class="btn-secondary">機能を見る →</a>
     <a href="mockup.html" class="btn-secondary" style="border-color:var(--text-2);color:var(--text-2)">🖥 画面モックを見る</a>
   </div>
 
-  <div class="hero-mockup fi">
+  <div class="hero-mockup fi" aria-hidden="true">
     <div class="win-bar">
       <div class="tl tl-r"></div>
       <div class="tl tl-y"></div>
       <div class="tl tl-g"></div>
-      <span class="win-title">TaskHub</span>
+      <div class="win-url">taskhub.vercel.app</div>
     </div>
     <div class="win-body">
       <div class="win-sidebar">
@@ -395,7 +399,7 @@
         <div class="win-toolbar">
           <span class="tb-title">今日</span>
           <span class="tb-spacer"></span>
-          <button class="tb-btn">⟳ 同期</button>
+          <button class="tb-btn" type="button" aria-hidden="true" tabindex="-1">⟳ 同期</button>
         </div>
         <div>
           <div class="task-row">
@@ -452,14 +456,14 @@
         <p class="feat-desc">Notion・Google スプレッドシートに分散したタスクをひとつの画面で確認・更新。ツールを横断した「自分ビュー」を実現します。</p>
       </div>
       <div class="feat-card fi">
-        <div class="feat-icon" style="background:rgba(52,199,89,.10)">📶</div>
-        <h3 class="feat-title">ローカルファースト</h3>
-        <p class="feat-desc">SwiftData によるオフライン完全動作。ネットワーク不在でもタスクの閲覧・編集・レポート生成がすべて動きます。</p>
+        <div class="feat-icon" style="background:rgba(52,199,89,.10)">🔄</div>
+        <h3 class="feat-title">リアルタイム同期</h3>
+        <p class="feat-desc">Supabase Realtime により、PC・スマホ間のデータが即座に同期。どのデバイスで更新しても、すべての画面に反映されます。</p>
       </div>
       <div class="feat-card fi">
         <div class="feat-icon" style="background:rgba(255,159,10,.10)">📝</div>
         <h3 class="feat-title">日報・作業報告の自動生成</h3>
-        <p class="feat-desc">テンプレートと差し込み変数で日報を 3 ステップで生成。クリップボードか Markdown ファイルとして出力できます。</p>
+        <p class="feat-desc">テンプレートと差し込み変数で日報を 3 ステップで生成。クリップボードや Markdown ファイルとして出力できます。</p>
       </div>
       <div class="feat-card fi">
         <div class="feat-icon" style="background:rgba(175,82,222,.10)">🗂️</div>
@@ -469,12 +473,12 @@
       <div class="feat-card fi">
         <div class="feat-icon" style="background:rgba(255,45,85,.10)">🔐</div>
         <h3 class="feat-title">セキュアな設計</h3>
-        <p class="feat-desc">API トークンや OAuth 認証情報は macOS Keychain で保護。コードにはシークレットをハードコードせず、設定画面ではマスク表示します。</p>
+        <p class="feat-desc">API トークンや OAuth 認証情報は Supabase Vault（pgsodium）で暗号化保管。Magic Link 認証と ALLOWED_EMAILS による個人限定アクセスを実現します。</p>
       </div>
       <div class="feat-card fi">
-        <div class="feat-icon" style="background:rgba(0,199,190,.10)">⌨️</div>
-        <h3 class="feat-title">キーボード中心の操作</h3>
-        <p class="feat-desc">⌘N・Space・⌘F・⌘T など主要操作はすべてショートカットに対応。マウスなしでも日常業務が完結します。</p>
+        <div class="feat-icon" style="background:rgba(0,199,190,.10)">🌐</div>
+        <h3 class="feat-title">マルチデバイス対応</h3>
+        <p class="feat-desc">Next.js App Router による高速レンダリングでブラウザからアクセス。インストール不要で PC・スマホ・タブレットから同じ体験を提供します。</p>
       </div>
     </div>
   </div>
@@ -494,7 +498,7 @@
         </svg>
       </div>
       <div class="tool-name">Notion</div>
-      <span class="tbadge tbadge-av">実装済み</span>
+      <span class="tbadge tbadge-av">MVP 対応</span>
     </div>
     <div class="tool-card av fi">
       <div class="tool-logo">
@@ -509,7 +513,7 @@
         </svg>
       </div>
       <div class="tool-name">Google スプレッドシート</div>
-      <span class="tbadge tbadge-av">実装済み</span>
+      <span class="tbadge tbadge-av">MVP 対応</span>
     </div>
     <div class="tool-card cs fi">
       <div class="tool-logo" style="font-size:32px;line-height:40px">🔵</div>
@@ -610,52 +614,54 @@
 <div class="sec-alt">
   <div class="sec-inner">
     <p class="eyebrow">技術スタック</p>
-    <h2 class="sec-title">Apple 標準技術で、堅牢に。</h2>
-    <p class="sec-desc">サードパーティ依存を最小化。OS レベルの API を活用したセキュアで高性能な設計です。</p>
+    <h2 class="sec-title">モダンな Web 技術で、堅牢に。</h2>
+    <p class="sec-desc">Next.js 15 App Router を中心に、型安全・セキュア・高速なフルスタック SaaS を構築します。</p>
     <div class="tech-grid">
       <div class="tech-card fi">
-        <div class="tech-icon">🦅</div>
-        <div class="tech-name">Swift 5.9+</div>
-        <div class="tech-detail">Concurrency · Actor · async/await</div>
+        <div class="tech-icon">▲</div>
+        <div class="tech-name">Next.js 15</div>
+        <div class="tech-detail">App Router · RSC · Server Actions</div>
       </div>
       <div class="tech-card fi">
-        <div class="tech-icon">🖼️</div>
-        <div class="tech-name">SwiftUI</div>
-        <div class="tech-detail">NavigationSplitView · @Observable</div>
+        <div class="tech-icon">🔷</div>
+        <div class="tech-name">TypeScript 5</div>
+        <div class="tech-detail">Strict モード · Zod バリデーション</div>
       </div>
       <div class="tech-card fi">
-        <div class="tech-icon">💾</div>
-        <div class="tech-name">SwiftData</div>
-        <div class="tech-detail">@Model マクロ · ローカル永続化</div>
+        <div class="tech-icon">⚡</div>
+        <div class="tech-name">Supabase</div>
+        <div class="tech-detail">Postgres · Magic Link · Realtime · Vault</div>
       </div>
       <div class="tech-card fi">
-        <div class="tech-icon">🔑</div>
-        <div class="tech-name">Keychain Services</div>
-        <div class="tech-detail">Security.framework · 認証情報保護</div>
+        <div class="tech-icon">🔺</div>
+        <div class="tech-name">Prisma 5</div>
+        <div class="tech-detail">型安全 ORM · マイグレーション管理</div>
       </div>
       <div class="tech-card fi">
-        <div class="tech-icon">🔐</div>
-        <div class="tech-name">AuthenticationServices</div>
-        <div class="tech-detail">OAuth 2.0 + PKCE · ASWebAuthSession</div>
+        <div class="tech-icon">🎨</div>
+        <div class="tech-name">shadcn/ui</div>
+        <div class="tech-detail">Radix UI · Tailwind CSS</div>
       </div>
       <div class="tech-card fi">
-        <div class="tech-icon">🖥️</div>
-        <div class="tech-name">macOS 14+ Universal</div>
-        <div class="tech-detail">arm64 + x86_64 · Sonoma 以上</div>
+        <div class="tech-icon">🚀</div>
+        <div class="tech-name">Vercel</div>
+        <div class="tech-detail">Hobby · Cron Jobs · Edge Network</div>
       </div>
     </div>
     <div class="arch-box-wrap fi">
-      <div class="arch-label">アーキテクチャ — MVVM + Repository + Service</div>
+      <div class="arch-label">アーキテクチャ — Route Handler / Server Action → Service → Repository</div>
       <div class="arch-row">
-        <div class="arch-node accent">View<br><small style="font-weight:400;font-size:11px;color:var(--text-2)">SwiftUI</small></div>
+        <div class="arch-node accent">View<br><small style="font-weight:400;font-size:11px;color:var(--text-2)">RSC / Client</small></div>
         <span class="arch-arr">→</span>
-        <div class="arch-node">ViewModel<br><small style="font-weight:400;font-size:11px;color:var(--text-2)">@Observable</small></div>
+        <div class="arch-node">Hook<br><small style="font-weight:400;font-size:11px;color:var(--text-2)">TanStack Query</small></div>
         <span class="arch-arr">→</span>
-        <div class="arch-node">Service<br><small style="font-weight:400;font-size:11px;color:var(--text-2)">actor</small></div>
+        <div class="arch-node">Route Handler<br><small style="font-weight:400;font-size:11px;color:var(--text-2)">Zod 検証</small></div>
         <span class="arch-arr">→</span>
-        <div class="arch-node">Repository<br><small style="font-weight:400;font-size:11px;color:var(--text-2)">SwiftData</small></div>
+        <div class="arch-node">Service<br><small style="font-weight:400;font-size:11px;color:var(--text-2)">ユースケース</small></div>
+        <span class="arch-arr">→</span>
+        <div class="arch-node">Repository<br><small style="font-weight:400;font-size:11px;color:var(--text-2)">Prisma</small></div>
       </div>
-      <div class="arch-sub">Service ↔ IntegrationProvider → HTTPClient &nbsp;/&nbsp; KeychainStore</div>
+      <div class="arch-sub">Service ↔ IntegrationProvider → HTTPClient &nbsp;/&nbsp; Supabase Vault</div>
     </div>
   </div>
 </div>
@@ -669,7 +675,7 @@
     <a href="https://github.com/ShigetomoYamamoto/task-hub/blob/main/docs/DESIGN.md">設計書</a>
     <a href="https://github.com/ShigetomoYamamoto/task-hub/issues">Issues</a>
   </div>
-  <p class="ft-copy">© 2026 TaskHub &nbsp;·&nbsp; macOS 14 Sonoma 以上 &nbsp;·&nbsp; 個人開発中</p>
+  <p class="ft-copy">© 2026 TaskHub &nbsp;·&nbsp; Next.js 15 + Supabase &nbsp;·&nbsp; 個人開発中</p>
 </footer>
 
 <script>
