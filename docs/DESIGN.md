@@ -1,1278 +1,1061 @@
-# 設計書：タスク管理デスクトップアプリ
+# TaskHub SaaS 版 設計書
 
-**バージョン**: 1.0.0
-**作成日**: 2026-05-23
-**対象要件**: REQUIREMENTS.md v1.2.0
-**ステータス**: ドラフト
-
----
-
-## Phase 1: 要件サマリー
-
-### 1.1 機能要件サマリー
-
-本アプリは macOS ネイティブのローカルファースト型タスク管理ツールで、以下の機能領域を持つ。
-
-**コアタスク管理（FR-01〜FR-09）**
-- プロジェクト → リスト → タスク → サブタスクの階層 CRUD
-- タグ管理（横断分類）、ステータス5値、進捗度（0-100%）、優先度4段階、期限、メモ、作業時間
-- 完了フラグとステータスの双方向連動、進捗100%時の確認ダイアログ
-- ⌘N / Space / ⌘F / ⌘⌫ / ⌘, / ⌘T / ↑↓ のキーボードショートカット
-- ダーク/ライトテーマ自動連動、SwiftData によるローカル永続化
-- 本日の進捗画面（⌘T）：今日のタスク収集、作業時間入力、合計表示、レポート起動
-
-**検索・整理（FR-10〜FR-12）**
-- 5,000件 p95 < 200ms の全文検索（タイトル/メモ/タグ/サブタスク）
-- 多軸フィルタと並び替え、設定の永続化
-- JSON エクスポート/インポート（認証情報除外）
-
-**外部タスクインポート（FR-13〜FR-18）**
-- インテグレーションカタログ UI（実装済み + Coming Soon の宣言的表示）
-- ツール種別 × N 接続モデル
-- MVP: Notion（Integration Token）/ Google スプレッドシート（OAuth 2.0 Desktop App）
-- 一括並列同期、自分にアサインされたタスクのみ取得
-- インボックスへの取込、移動後の追跡保持、重複防止（connectionId + externalId 複合キー）
-- 競合解決ルール：外部の title/note/dueDate は上書き、ローカルの status/progress は保持
-- Keychain によるシークレット保管、Exponential Backoff、接続テスト
-
-**日報・作業報告（FR-19〜FR-22）**
-- レポートテンプレート CRUD、デフォルト2種プリセット
-- 差し込み変数システム（12種類）、クリック挿入エディター、プレビュー
-- レポート生成 → クリップボード/Markdown ファイル出力
-- レポート履歴のローカル保存と再編集
-
-### 1.2 非機能要件サマリー
-
-| 領域 | 主要指標 |
-|------|---------|
-| 性能 | 起動 p95 < 2s、検索 p95 < 200ms、5,000タスクで60fps、メモリ < 300MB |
-| セキュリティ | Keychain 専用ストア、HTTPS 限定、ログにシークレット非含 |
-| 可用性 | 完全オフライン動作、API 障害時もアプリ継続 |
-| 互換性 | macOS 14 Sonoma+、Universal Binary、未署名 .dmg |
-| スケール | プロジェクト 50 / リスト 500 / タスク 10,000 |
-| アクセシビリティ | VoiceOver、キーボードのみ操作完結 |
-| 国際化 | 日本語 / 英語、システム追従 |
-
-### 1.3 外部依存と統合点
-
-| 依存先 | 用途 | 認証方式 | レート制限 |
-|--------|------|---------|----------|
-| Notion API v1 | ページ取得（自分にアサイン） | Integration Token | 3 req/sec |
-| Google Sheets API v4 | シート行取得（担当者列マッチ） | OAuth 2.0 Desktop App | 60 req/min/user |
-| Google OAuth 2.0 endpoint | トークン取得・更新 | カスタム URL スキーム | - |
-| macOS Keychain Services | シークレット永続化 | システム API | - |
-| macOS Pasteboard | レポートコピー | システム API | - |
-| ファイルシステム | Markdown / JSON 入出力 | NSOpenPanel/NSSavePanel | - |
-
-### 1.4 制約と前提
-
-**制約（要件由来）**
-- 未署名 .dmg 配布 → Gatekeeper 警告、Keychain プロンプトのリスク（R1）
-- Apple Developer Program なし → Code Signing / Notarization なし
-- macOS 14 Sonoma 最低対応 → SwiftData 利用可能ライン
-- MVP は単方向同期のみ（読み取りのみ）
-
-**前提**
-- ユーザーは個人利用、シングルデバイス
-- ネットワーク不在でも全コア機能が動作
-- Notion ユーザー ID および Google アカウント担当者列値はユーザーが手動入力
-- 自動同期・通知・カレンダー連携は対象外（4.3）
+**バージョン**: v2.0.0-saas
+**作成日**: 2026-05-25
+**ステータス**: 承認済み
+**対応要件定義**: `docs/REQUIREMENTS.md` v2.0.0-saas
+**対象プラットフォーム**: モダン Web ブラウザ（PC + スマホ）
 
 ---
 
-## Phase 2: 現状分析（グリーンフィールド）
+## 0. 本書の位置づけ
 
-### 2.1 技術スタック検証
+本書は要件定義書 v2.0.0-saas を受けて、TaskHub SaaS 版（Web アプリ）の技術設計を確定するものである。以下の未解決事項に対する判断を含む：
 
-| 検証項目 | 結論 | 根拠 |
-|---------|-----|-----|
-| SwiftUI on macOS 14+ | 採用可 | NavigationSplitView、Table、Menu Bar 等の必要 API が揃う |
-| SwiftData on macOS 14+ | 採用可 | SwiftData は iOS 17 / macOS 14 から。要件の最低 OS を macOS 14 Sonoma に改訂する |
-| Universal Binary | 採用可 | Xcode 15 で arm64 + x86_64 ターゲット |
-| Keychain Services | 採用可 | Security.framework 標準 |
-| AuthenticationServices (ASWebAuthenticationSession) | 採用可 | OAuth リダイレクト処理に macOS 11+ から利用可 |
-
-> **要件との調整**: SwiftData は macOS 14+ 必須のため、REQUIREMENTS.md の最低 OS を「macOS 13 Ventura」から「macOS 14 Sonoma」に改訂する（ADR-001 参照）。
-
-### 2.2 既知の制約と対策の事前整理
-
-| 制約 | 対策方針 |
-|------|---------|
-| 未署名 → Gatekeeper | 初回起動手順をドキュメント化、`xattr -d com.apple.quarantine` の案内 |
-| 未署名 → Keychain プロンプト | `kSecAttrAccessibleAfterFirstUnlock` + アプリ識別子で同一プロセスからのアクセスを最小化（R1） |
-| OAuth リダイレクト | カスタム URL スキーム `taskhub://oauth/callback` を Info.plist に登録、`ASWebAuthenticationSession` 利用（R3） |
-| Notion レート制限 | `RateLimiter` actor で 3 req/sec、429 時に Exponential Backoff（R2） |
-| SwiftData クエリ制限 | 複雑クエリは `FetchDescriptor` + インメモリフィルタ、最悪時 `NSPredicate` フォールバック（R4） |
-| 外部 ID 衝突 | `(connectionId, externalId)` 複合一意制約 + 重複チェック（R5） |
-| Google Sheet 列多様性 | 接続設定に「列マッピング」UI（担当者列・タイトル列・期限列等を指定）（R6） |
+- Q1: アクセス制御方式 → Supabase Auth Magic Link + ALLOWED_EMAILS allowlist
+- Q2: リアルタイム同期方式 → Supabase Realtime (Postgres Changes)
+- Q3: 同期ジョブの実行方式 → Vercel Cron + Vercel Background Functions（Inngest は MVP では採用しない）
+- Q4: デプロイ先 → Vercel Hobby
+- Q5: ホスティング費用 → 無料枠優先（Supabase Free + Vercel Hobby）
+- Q6: クラウド DB → Supabase Postgres
+- Q7: 認証情報の暗号化ストレージ → Supabase Vault (pgsodium)
 
 ---
 
-## Phase 3: 設計
+## 1. 技術スタック決定表
 
-### 3.1 アプリケーションアーキテクチャ
-
-#### 3.1.1 アーキテクチャパターン
-
-**採用**: **MVVM + Repository + Service Layer**（軽量 Clean Architecture）
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                       View (SwiftUI)                     │
-│   NavigationSplitView / List / Form / Custom Views       │
-└──────────────┬──────────────────────────────────────────┘
-               │ @Observable / @Bindable
-┌──────────────▼──────────────────────────────────────────┐
-│                    ViewModel                             │
-│   InboxViewModel / TodayViewModel / ReportViewModel ...  │
-└──────────────┬──────────────────────────────────────────┘
-               │ async/await
-┌──────────────▼──────────────────────────────────────────┐
-│                  Service / UseCase                       │
-│   SyncService / ReportService / SearchService / ...      │
-└──────────────┬──────────────────────────────────────────┘
-               │
-┌──────────────▼──────────────┐  ┌──────────────────────┐
-│      Repository              │  │   IntegrationProvider │
-│   TaskRepository             │  │   NotionProvider      │
-│   ProjectRepository          │  │   GoogleSheetsProvider│
-│   ConnectionRepository       │  │   (Protocol-based)    │
-└──────────────┬──────────────┘  └──────────┬────────────┘
-               │                             │
-┌──────────────▼──────────────┐  ┌──────────▼────────────┐
-│      SwiftData               │  │   KeychainStore       │
-│      ModelContext            │  │   HTTPClient          │
-└─────────────────────────────┘  └───────────────────────┘
-```
-
-#### 3.1.2 レイヤー責務
-
-| レイヤー | 責務 | 例 |
-|---------|------|-----|
-| View | 表示と入力イベント発火のみ。状態は ViewModel に委譲 | `InboxView`, `TaskRowView`, `ReportPreviewView` |
-| ViewModel | 画面状態保持、ユーザー操作のサービス呼び出し、表示用 DTO 整形 | `TodayViewModel`, `IntegrationSettingsViewModel` |
-| Service | 複数 Repository / Provider を協調させるユースケース | `SyncService`, `ReportService`, `ImportExportService` |
-| Repository | SwiftData ModelContext のラッパー、永続化操作の集約 | `TaskRepository`, `ConnectionRepository` |
-| IntegrationProvider | 外部ツール固有のプロトコル実装、ローカル DTO 変換 | `NotionProvider`, `GoogleSheetsProvider` |
-| Infrastructure | Keychain、HTTP、ファイル IO、ペーストボード等 | `KeychainStore`, `HTTPClient`, `OAuthService` |
-
-#### 3.1.3 モジュール / フィーチャー境界
-
-```
-TaskHub/
-├── App/                       # @main, AppDelegate, DI コンポジションルート
-├── Core/
-│   ├── Models/                # SwiftData @Model
-│   ├── Repositories/
-│   ├── Services/
-│   └── Infrastructure/        # Keychain / HTTP / Pasteboard / FileIO
-├── Features/
-│   ├── Sidebar/               # プロジェクト/リスト/インボックス ナビ
-│   ├── Inbox/
-│   ├── ProjectList/           # プロジェクト・リスト・タスク表示
-│   ├── TaskDetail/            # サブタスク・タグ・メモ等の編集
-│   ├── Today/                 # 本日の進捗（⌘T）
-│   ├── Search/
-│   ├── Settings/
-│   │   ├── Integrations/      # カタログ + 接続管理
-│   │   ├── Tags/
-│   │   └── General/
-│   ├── Report/
-│   │   ├── Templates/         # テンプレ CRUD
-│   │   ├── Generate/          # 生成画面
-│   │   └── History/           # 履歴
-│   └── ImportExport/
-├── Integrations/
-│   ├── Provider/              # IntegrationProvider プロトコル
-│   ├── Notion/                # NotionProvider
-│   ├── GoogleSheets/          # GoogleSheetsProvider
-│   └── Catalog/               # IntegrationCatalog 宣言データ
-├── DesignSystem/              # カラー・タイポ・共通 View
-└── Resources/                 # Localizable.strings, Assets
-```
-
-ファイルあたり 200-400 行を目安、800 行を上限とする。
+| レイヤー | 採用技術 | 主な代替案 | 決定理由 |
+|---------|---------|----------|---------| 
+| 言語 | TypeScript 5.x | — | 型安全性、要件で必須指定 |
+| フレームワーク | Next.js 15 App Router | Remix / SvelteKit | RSC + Server Actions による楽観的 UI、Vercel との親和性、要件で前提 |
+| UI ライブラリ | shadcn/ui (Radix UI + Tailwind CSS) | MUI / Chakra | コピー&ペースト型でカスタマイズ容易、a11y 標準準拠、レスポンシブ容易 |
+| 状態管理 (Server) | TanStack Query | SWR | キャッシュ・楽観的更新・無効化が宣言的 |
+| 状態管理 (Client) | Zustand | Jotai / Redux | UI ステートのみに限定、軽量 |
+| フォーム | React Hook Form + Zod | Formik | Zod スキーマをサーバー検証と共用 |
+| スキーマ検証 | Zod | Yup / Valibot | TS 親和性、Route Handlers / Server Actions 双方で再利用 |
+| ORM | Prisma 5 | Drizzle | DX・マイグレーション・型生成が安定 |
+| DB / Auth / Realtime / Vault | Supabase | Neon + Clerk / PlanetScale | DB + Auth + Realtime + Vault を統合提供 |
+| 認証方式 (Q1) | Supabase Auth Magic Link + ALLOWED_EMAILS allowlist | NextAuth / Clerk / Vercel パスワード | Email allowlist で個人限定、パスワード管理不要、無料 |
+| バックグラウンドジョブ (Q3) | Vercel Cron + 自前 SyncRun テーブル | Inngest / Trigger.dev / Supabase Edge | MVP では外部依存を増やさず Vercel 標準機構で実装。Cron で接続ごとに順次起動、進捗は DB に書き込み Realtime 配信 |
+| リアルタイム (Q2) | Supabase Realtime (Postgres Changes) | SSE / ポーリング | 既存 Supabase 採用なら追加コスト 0 |
+| デプロイ (Q4) | Vercel Hobby | Cloudflare Pages | Next.js 公式、Hobby 無料枠で個人利用は十分 |
+| シークレット保管 (Q7) | Supabase Vault (pgsodium) | AWS KMS / Doppler | DB と同基盤、サーバー側のみ復号可能 |
+| 監視 | Vercel Analytics + Sentry (任意) | Datadog | 無料枠あり |
+| 国際化 | next-intl | next-i18next | App Router 公式対応、軽量 |
+| テスト | Vitest + Playwright + Testing Library | Jest | App Router + ESM 親和性 |
+| Lint / Format | Biome | ESLint + Prettier | 高速、設定統合 |
 
 ---
 
-### 3.2 データモデル（SwiftData @Model）
+## 2. Architecture Decision Records (ADR)
 
-すべてのエンティティで `id: UUID` を主キーとし、`createdAt` / `updatedAt` を共通に持つ。SwiftData の `@Model` マクロでクラス宣言する。
+### ADR-001: Supabase をプラットフォーム基盤として採用
 
-#### 3.2.1 Project
+**Context**
+DB / Auth / Realtime / Vault が個別サービスだと運用とコストが複雑化する。個人利用前提のため、低運用コストを最優先したい。
 
-```swift
-@Model
-final class Project {
-    @Attribute(.unique) var id: UUID
-    var name: String
-    var colorHex: String          // "#RRGGBB"
-    var iconName: String          // SF Symbol 名
-    var sortOrder: Int
-    var createdAt: Date
-    var updatedAt: Date
+**Decision**
+Supabase に統合する（Postgres / Auth / Realtime / Vault / Storage）。
 
-    @Relationship(deleteRule: .cascade, inverse: \TaskList.project)
-    var lists: [TaskList] = []
-}
-```
+**Consequences**
 
-- インデックス: `sortOrder`
-- カスケード削除: 配下の TaskList → Task → Subtask
+Positive:
+- 無料枠（500MB DB / 2GB egress / 50,000 MAU）で本要件を満たす
+- 標準 Postgres のため SQL の知見がそのまま使える
+- Vault による暗号化保管が DB と同じトランザクション境界で扱える
 
-#### 3.2.2 TaskList
+Negative:
+- ベンダーロックインのリスク
 
-```swift
-@Model
-final class TaskList {
-    @Attribute(.unique) var id: UUID
-    var name: String
-    var sortOrder: Int
-    var isInbox: Bool             // 固定の Inbox は true / 削除不可
-    var createdAt: Date
-    var updatedAt: Date
+Alternatives Considered:
+- Neon (Postgres) + Clerk (Auth) + Upstash (Redis): 構成要素が増え運用負荷増
+- PlanetScale (MySQL) + 他 Auth: MySQL は Postgres ほど検索・JSONB 機能が強くない
 
-    var project: Project?         // nil の場合はインボックス（プロジェクト非所属）
+**Mitigation**
+- Prisma 経由のアクセスで標準 Postgres から逸脱しない
+- JSON エクスポート（FR-12）で脱出経路を確保
 
-    @Relationship(deleteRule: .cascade, inverse: \Task.list)
-    var tasks: [Task] = []
-}
-```
-
-- インボックスは `isInbox = true` かつ `project == nil` の唯一の TaskList として初期化時に生成（削除・リネーム不可をアプリ層で強制）
-- インデックス: `(project, sortOrder)`, `isInbox`
-
-#### 3.2.3 Task
-
-```swift
-enum TaskStatus: String, Codable, CaseIterable {
-    case notStarted, inProgress, inReview, completed, onHold
-}
-
-enum TaskPriority: String, Codable, CaseIterable {
-    case low, medium, high, urgent
-}
-
-enum TaskSource: String, Codable {
-    case manual
-    case external                 // connectionId が非 nil
-}
-
-@Model
-final class Task {
-    @Attribute(.unique) var id: UUID
-    var title: String
-    var note: String              // Markdown 可
-    var dueDate: Date?
-    var priority: TaskPriority
-    var status: TaskStatus
-    var progress: Int             // 0-100
-    var isCompleted: Bool
-    var workHoursByDate: [DateKey: Double] = [:]   // 日付ごとの作業時間（h, 0.5刻み）
-    var sortOrder: Int
-    var isArchived: Bool          // 外部削除時の「残す」選択でグレーアウト
-    var createdAt: Date
-    var updatedAt: Date
-
-    // Source 情報
-    var source: TaskSource
-    var connectionId: UUID?       // 外部由来時
-    var externalId: String?       // 外部 ID
-    var externalUrl: String?      // 外部ツールへのリンク
-    var lastSyncedAt: Date?
-
-    var list: TaskList?
-
-    @Relationship(deleteRule: .cascade, inverse: \Subtask.task)
-    var subtasks: [Subtask] = []
-
-    @Relationship(inverse: \Tag.tasks)
-    var tags: [Tag] = []
-}
-
-struct DateKey: Codable, Hashable {
-    let year: Int
-    let month: Int
-    let day: Int
-}
-```
-
-- 一意制約（複合キー）: `(connectionId, externalId)` を **アプリ層で強制**（SwiftData は複合ユニーク非対応のため、登録時にチェック）
-- インデックス: `status`, `dueDate`, `isCompleted`, `(list, sortOrder)`, `externalId`
-- `workHoursByDate` は値型辞書として保存（SwiftData の Codable 属性として）
-
-#### 3.2.4 Subtask
-
-```swift
-@Model
-final class Subtask {
-    @Attribute(.unique) var id: UUID
-    var title: String
-    var isCompleted: Bool
-    var sortOrder: Int
-    var source: TaskSource        // 外部由来か手動追加か（同期保持判定用）
-    var externalId: String?
-    var createdAt: Date
-    var updatedAt: Date
-
-    var task: Task?
-}
-```
-
-- インデックス: `(task, sortOrder)`
-
-#### 3.2.5 Tag
-
-```swift
-@Model
-final class Tag {
-    @Attribute(.unique) var id: UUID
-    @Attribute(.unique) var name: String
-    var colorHex: String
-    var createdAt: Date
-
-    var tasks: [Task] = []        // 多対多（Task 側に inverse 定義）
-}
-```
-
-#### 3.2.6 Connection
-
-```swift
-enum IntegrationKind: String, Codable {
-    case notion
-    case googleSheets
-    // 将来: case jira, linear, asana, trello, githubIssues
-}
-
-@Model
-final class Connection {
-    @Attribute(.unique) var id: UUID
-    var name: String                       // ユーザー設定名
-    var kind: IntegrationKind
-    var isEnabled: Bool
-    var meIdentifier: String               // 自分の識別子
-    var configJSON: Data                   // ツール固有設定（JSON エンコード）
-    var keychainRef: String                // Keychain アイテムの service+account 識別子
-    var lastSyncedAt: Date?
-    var lastSyncStatus: String?            // "success" | "failed: <reason>"
-    var createdAt: Date
-    var updatedAt: Date
-}
-```
-
-- 認証情報は **Keychain にのみ** 保存。`keychainRef` は `"com.taskhub.connection.<uuid>"` の形式
-- `configJSON` には Notion なら `{ "databaseId": "..." }`、GSheet なら `{ "spreadsheetId": "...", "sheetName": "...", "assigneeColumn": "C", "titleColumn": "B", "dueDateColumn": "D" }` を保存
-
-#### 3.2.7 SyncRecord
-
-```swift
-@Model
-final class SyncRecord {
-    @Attribute(.unique) var id: UUID
-    var connectionId: UUID
-    var externalId: String                 // 外部一意 ID
-    var localTaskId: UUID                  // 紐づくローカル Task
-    var lastSyncedAt: Date
-    var externalFingerprint: String        // 外部側ハッシュ（差分検出用）
-    var createdAt: Date
-}
-```
-
-- 複合一意制約: `(connectionId, externalId)` をアプリ層で強制
-- インデックス: `connectionId`, `externalId`
-- 再同期時にこのテーブルで重複を判定し、`localTaskId` を介して既存タスクを更新
-
-#### 3.2.8 ReportTemplate
-
-```swift
-enum ReportPeriodKind: String, Codable {
-    case today, thisWeek, thisMonth, custom
-}
-
-@Model
-final class ReportTemplate {
-    @Attribute(.unique) var id: UUID
-    var name: String
-    var periodKind: ReportPeriodKind
-    var body: String                       // {{変数}} を含む本文
-    var isBuiltIn: Bool                    // デフォルトプリセット
-    var sortOrder: Int
-    var createdAt: Date
-    var updatedAt: Date
-}
-```
-
-#### 3.2.9 ReportHistory
-
-```swift
-@Model
-final class ReportHistory {
-    @Attribute(.unique) var id: UUID
-    var templateName: String               // テンプレ削除に備えてスナップショット
-    var templateId: UUID?                  // 元テンプレ参照（削除されていれば nil）
-    var periodStart: Date?
-    var periodEnd: Date?
-    var generatedAt: Date
-    var renderedBody: String               // 生成後の本文（編集後の最終形）
-}
-```
-
-- インデックス: `generatedAt` 降順用
-
-#### 3.2.10 リレーション図
-
-```
-Project 1───* TaskList 1───* Task 1───* Subtask
-                              *───* Tag
-                              *───1 Connection（オプション）
-Connection 1───* SyncRecord *───1 Task
-ReportTemplate    （独立）
-ReportHistory     （独立、templateId は弱参照）
-```
+**Status**: Accepted
 
 ---
 
-### 3.3 ナビゲーション・画面構成
+### ADR-002: 認証は Supabase Auth Magic Link + メール allowlist
 
-#### 3.3.1 メインウィンドウ（NavigationSplitView）
+**Context**
+URL を知る他者からのアクセスを拒否する必要がある（R1）。同時に、個人利用前提でパスワード管理の負荷を増やしたくない。
 
-3 ペイン構成：
+**Decision**
+- Supabase Auth の Magic Link を採用
+- サーバー側 `ALLOWED_EMAILS` 環境変数で許可メールアドレスを限定
+- Magic Link 送信前 / コールバック後の二段階で allowlist 検証
 
-```
-┌───────────────┬──────────────────┬──────────────────────┐
-│   Sidebar     │   Content List   │   Detail / Inspector │
-│               │                  │                      │
-│  📥 インボックス │ タスク一覧（Table）│   タスク詳細         │
-│  📅 今日 (⌘T) │ ・ステータス       │   ・サブタスク       │
-│  🔍 検索       │ ・進捗 / 期限     │   ・タグ            │
-│  ─────        │ ・優先度          │   ・メモ            │
-│  📁 Project A │ ・タグ            │   ・作業時間         │
-│   └ List 1   │                  │                      │
-│   └ List 2   │ [新規 (⌘N)]      │                      │
-│  📁 Project B │ [同期 ↻]         │                      │
-│  ─────        │                  │                      │
-│  ⚙️ 設定 (⌘,) │                  │                      │
-└───────────────┴──────────────────┴──────────────────────┘
-```
+**Consequences**
 
-| ペイン | 役割 | 主要 View |
-|--------|-----|----------|
-| Sidebar | プロジェクト/リスト/固定ビューのナビ | `SidebarView` |
-| Content List | 選択中ノードのタスク一覧 | `TaskListView`（Table 使用） |
-| Detail | 選択中タスクの詳細編集 | `TaskDetailView` |
+Positive:
+- パスワード漏洩・忘却リスクなし
+- 無料枠内
+- 将来マルチユーザー対応へ拡張可能（allowlist を解除）
+- RLS と統合可能
 
-#### 3.3.2 画面一覧と遷移
+Negative:
+- メール到達遅延（数秒〜1 分）
+- メールアカウントを失うとアクセス不能
 
-| 画面 ID | 名称 | 入口 | 主要要素 |
-|---------|-----|-----|---------|
-| S-01 | メインウィンドウ | アプリ起動 | Split View |
-| S-02 | インボックス | サイドバー「インボックス」 | タスク Table、ソース badge |
-| S-03 | プロジェクト/リスト | サイドバーで選択 | タスク Table |
-| S-04 | タスク詳細 | タスク選択 | Form |
-| S-05 | 本日の進捗 | ⌘T / サイドバー「今日」 | 工数入力可能 Table + 合計表示 |
-| S-06 | 検索 | ⌘F | 全文検索結果 |
-| S-07 | 設定 - General | ⌘, → 一般タブ | テーマ等 |
-| S-08 | 設定 - Tags | ⌘, → タグタブ | タグ CRUD |
-| S-09 | 設定 - Integrations カタログ | ⌘, → インテグレーションタブ | ツール一覧 |
-| S-10 | 設定 - 接続管理 | カタログでツール選択 | 接続 CRUD |
-| S-11 | 設定 - 接続編集 | + 接続 / 編集 | 認証・configフォーム |
-| S-12 | レポート生成 | メニュー / 本日の進捗から | テンプレ選択 + プレビュー |
-| S-13 | レポートテンプレ管理 | 設定 → レポートタブ | テンプレ CRUD |
-| S-14 | レポート履歴 | メニュー → 履歴 | 履歴一覧 + 詳細 |
-| S-15 | JSON エクスポート/インポート | ファイルメニュー | ファイル選択ダイアログ |
-| S-16 | 外部削除確認ダイアログ | 同期中に検出 | 削除/残す選択 + 一覧 |
+Alternatives Considered:
+- NextAuth.js: DB スキーマ管理が増え重複
+- Clerk: 無料枠を超えやすい
+- Vercel Password Protection: アプリ層のセッション情報を持てず RLS と統合できない
+- シンプルパスワード（環境変数）: セッション・ログイン状態管理を自前実装する必要あり
 
-#### 3.3.3 画面遷移マップ
-
-```
-                    ┌─── S-12 レポート生成 ──── S-14 履歴
-                    │       ▲
-S-01 メイン         │       │
- ├── S-02 インボックス      │
- ├── S-03 プロジェクト/リスト│
- ├── S-04 タスク詳細         │
- ├── S-05 本日の進捗 ───────┘ （[作業開始報告/業務日報] ボタン）
- ├── S-06 検索
- └── S-07/08/09 設定
-       └── S-09 カタログ ── S-10 接続管理 ── S-11 接続編集
-       └── S-13 テンプレ管理
-```
-
-#### 3.3.4 メニューバー構成
-
-| メニュー | 項目 | ショートカット |
-|---------|------|--------------|
-| File | New Task | ⌘N |
-| File | Export JSON / Import JSON | - |
-| File | Save Report as Markdown | - |
-| Edit | Delete Task | ⌘⌫ |
-| Edit | Find | ⌘F |
-| View | Focus Today | ⌘T |
-| Report | Generate Report | ⌘R |
-| Report | Report History | - |
-| TaskHub | Preferences | ⌘, |
+**Status**: Accepted
 
 ---
 
-### 3.4 インテグレーション層設計
+### ADR-003: ORM は Prisma
 
-#### 3.4.1 IntegrationProvider プロトコル
+**Context**
+型安全な DB アクセスとマイグレーション管理が必要。Supabase Postgres 上で動かす。
 
-```swift
-protocol IntegrationProvider: Sendable {
-    static var kind: IntegrationKind { get }
-    static var displayMetadata: IntegrationDisplayMeta { get }   // 名前・アイコン・説明
+**Decision**
+Prisma 5 を採用。
 
-    /// 接続テスト
-    func testConnection(_ connection: Connection) async throws
+**Consequences**
 
-    /// 自分にアサインされたタスクのみ取得
-    func fetchAssignedTasks(
-        connection: Connection,
-        progress: @Sendable (Double) -> Void
-    ) async throws -> [ExternalTaskDTO]
+Positive:
+- 型生成、マイグレーション CLI、TS 親和性
+- Supabase 公式ガイドあり
 
-    /// 認証 UI（OAuth フローなど）の起動
-    func authenticate(existing: Connection?) async throws -> AuthResult
+Negative:
+- Edge Runtime での制限あり → Route Handlers は Node Runtime を明示
+
+Alternatives Considered:
+- Drizzle: 軽量だが、個人利用規模では Prisma の DX 優位が大きい
+
+**Status**: Accepted
+
+---
+
+### ADR-004: バックグラウンド同期は Vercel Cron + 自前 SyncRun テーブル（Inngest 不採用）
+
+**Context**
+Vercel Hobby は関数実行時間が 60 秒上限。Notion / GSheet の全件同期は条件次第でこれを超え得る（R5）。当初 Inngest を候補としたが、MVP では外部サービス依存を最小化し、運用と学習コストを下げたい。
+
+**Decision**
+- MVP では **Inngest を採用しない**
+- Vercel Cron（任意の手動同期は API 経由でも起動可）+ 自前 `SyncRun` テーブルで同期ジョブを管理
+- 同期処理は **1 接続ずつ順次実行**（並列化しない）
+- 進捗は `SyncRun.progress` / `SyncRun.itemsProcessed` への書き込みで管理し、Supabase Realtime で UI に配信
+- 60 秒制限を超え得る接続は **「接続を内部的に分割して複数回呼び出す」設計**（カーソル/ページトークンを `SyncRun.cursor` カラムに保存し、次回継続実行）
+- レート制限はサーバープロセス内の token bucket で制御（Notion 3 req/sec、GSheet 60 req/min）
+
+**Consequences**
+
+Positive:
+- 外部依存ゼロ、無料
+- ジョブ実装が標準 Next.js Route Handler で完結
+- 個人利用（1 ユーザー、想定タスク 10,000 件）規模では十分
+
+Negative:
+- 並列化なし → 接続数が多いと総時間が長くなる
+- 関数 60 秒制限への対応として分割実行ロジックを自前で書く必要がある
+- Inngest のような Step ベースの可観測性は得られない（自前でログ整備する必要あり）
+
+Alternatives Considered:
+- **Inngest**: 機能は強力だが MVP では過剰、将来必要になれば追加
+- **Trigger.dev**: 同上
+- **Supabase Edge Functions**: 別ランタイム管理が増える
+
+**Future Path**
+- スループット要件が増えた段階で Inngest へ移行（Service 層インターフェースは維持）
+
+**Status**: Accepted
+
+---
+
+### ADR-005: リアルタイム同期は Supabase Realtime (Postgres Changes)
+
+**Context**
+PC ↔ スマホで同データを反映する必要がある（FR-09）。同期進捗もリアルタイムに UI に表示したい（FR-15）。
+
+**Decision**
+- `tasks` / `subtasks` / `sync_runs` テーブルの Postgres Changes (CDC) を Supabase Realtime クライアントで購読
+- `user_id = auth.uid()` でフィルタ
+
+**Consequences**
+
+Positive:
+- 既存 Supabase 基盤の上で動く（追加コストなし）
+- SSE 自前実装より堅牢
+- フィルタ条件をクライアントから指定可能
+
+Negative:
+- 無料枠の同時接続数上限あり（個人利用 PC + スマホ程度では問題なし）
+
+Alternatives Considered:
+- SSE: Vercel 上で長時間接続を維持するコストが高い
+- ポーリング: バッテリー消費・無駄なリクエスト
+
+**Status**: Accepted
+
+---
+
+## 3. データベース設計
+
+### 3.1 Prisma スキーマ
+
+```prisma
+// prisma/schema.prisma
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
-struct ExternalTaskDTO: Sendable {
-    let externalId: String
-    let title: String
-    let note: String?
-    let dueDate: Date?
-    let status: TaskStatus?         // 外部ステータスからのマッピング
-    let priority: TaskPriority?
-    let externalUrl: String?
-    let subtasks: [ExternalSubtaskDTO]
-    let externalFingerprint: String  // ハッシュ
+generator client {
+  provider = "prisma-client-js"
 }
 
-struct ExternalSubtaskDTO: Sendable {
-    let externalId: String
-    let title: String
-    let isCompleted: Bool
+// ===== Users (Supabase auth.users を参照) =====
+model User {
+  id        String   @id @db.Uuid // = auth.users.id
+  email     String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+
+  projects        Project[]
+  taskLists       TaskList[]
+  tasks           Task[]
+  tags            Tag[]
+  connections     Connection[]
+  reportTemplates ReportTemplate[]
+  reportHistory   ReportHistory[]
+  settings        UserSettings?
+
+  @@map("users")
 }
 
-struct AuthResult: Sendable {
-    let keychainRef: String         // 保存後の参照
-    let meIdentifier: String?       // 取得できた場合
+// ===== Projects =====
+model Project {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  name      String
+  color     String   @default("#6366f1")
+  icon      String?
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  taskLists TaskList[]
+
+  @@index([userId])
+  @@map("projects")
 }
 
-struct IntegrationDisplayMeta: Sendable {
-    let id: IntegrationKind
-    let name: String
-    let iconAssetName: String
-    let isComingSoon: Bool
-    let description: String
-    let docsURL: URL?
+// ===== TaskLists (Inbox 含む) =====
+model TaskList {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  projectId String?  @map("project_id") @db.Uuid // null = Inbox 等の独立リスト
+  name      String
+  isInbox   Boolean  @default(false) @map("is_inbox")
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tasks   Task[]
+
+  @@index([userId, projectId])
+  @@map("task_lists")
+}
+
+// ===== Tasks =====
+enum TaskStatus {
+  not_started
+  in_progress
+  in_review
+  completed
+  on_hold
+}
+
+enum TaskPriority {
+  low
+  medium
+  high
+  urgent
+}
+
+enum TaskSource {
+  manual
+  notion
+  gsheet
+}
+
+model Task {
+  id              String        @id @default(uuid()) @db.Uuid
+  userId          String        @map("user_id") @db.Uuid
+  taskListId      String        @map("task_list_id") @db.Uuid
+  title           String
+  memo            String?
+  dueDate         DateTime?     @map("due_date") @db.Date
+  priority        TaskPriority  @default(medium)
+  status          TaskStatus    @default(not_started)
+  progress        Int           @default(0)  // 0..100
+  isCompleted     Boolean       @default(false) @map("is_completed")
+  isArchived      Boolean       @default(false) @map("is_archived")
+  source          TaskSource    @default(manual)
+  workHoursByDate Json          @default("{}") @map("work_hours_by_date") // { "2026-05-25": 1.5 }
+  sortOrder       Int           @default(0) @map("sort_order")
+  searchVector   Unsupported("tsvector")? @map("search_vector")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  taskList   TaskList    @relation(fields: [taskListId], references: [id], onDelete: Cascade)
+  subtasks   Subtask[]
+  taskTags   TaskTag[]
+  syncRecord SyncRecord?
+
+  @@index([userId, status, isCompleted])
+  @@index([userId, dueDate])
+  @@index([taskListId])
+  @@map("tasks")
+}
+
+// ===== Subtasks =====
+model Subtask {
+  id          String   @id @default(uuid()) @db.Uuid
+  taskId      String   @map("task_id") @db.Uuid
+  title       String
+  isCompleted Boolean  @default(false) @map("is_completed")
+  sortOrder   Int      @default(0) @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+  @@map("subtasks")
+}
+
+// ===== Tags =====
+model Tag {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  name      String
+  color     String   @default("#94a3b8")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  taskTags TaskTag[]
+
+  @@unique([userId, name])
+  @@map("tags")
+}
+
+model TaskTag {
+  taskId String @map("task_id") @db.Uuid
+  tagId  String @map("tag_id") @db.Uuid
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  tag  Tag  @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([taskId, tagId])
+  @@map("task_tags")
+}
+
+// ===== Connections (外部ツール接続) =====
+enum ConnectionKind {
+  notion
+  gsheet
+}
+
+model Connection {
+  id             String         @id @default(uuid()) @db.Uuid
+  userId         String         @map("user_id") @db.Uuid
+  kind           ConnectionKind
+  name           String
+  isEnabled      Boolean        @default(true) @map("is_enabled")
+  selfIdentifier String         @map("self_identifier")
+  config         Json           @default("{}") // Notion: {databaseId}, GSheet: {spreadsheetId, sheet, columnMap}
+  vaultSecretId  String         @map("vault_secret_id") // Supabase Vault の secret id
+  lastSyncAt     DateTime?      @map("last_sync_at")
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
+
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  syncRecords SyncRecord[]
+  syncRuns    SyncRun[]
+
+  @@index([userId, kind])
+  @@map("connections")
+}
+
+// ===== Sync Records (外部タスクとローカルの対応) =====
+model SyncRecord {
+  id                String    @id @default(uuid()) @db.Uuid
+  connectionId      String    @map("connection_id") @db.Uuid
+  externalId        String    @map("external_id")
+  taskId            String    @unique @map("task_id") @db.Uuid
+  externalUrl       String?   @map("external_url")
+  externalUpdatedAt DateTime? @map("external_updated_at")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  connection Connection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  task       Task       @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@unique([connectionId, externalId])
+  @@map("sync_records")
+}
+
+// ===== Sync Runs (ジョブ実行履歴・進捗配信用) =====
+enum SyncRunStatus {
+  queued
+  running
+  succeeded
+  failed
+  cancelled
+  partial
+}
+
+model SyncRun {
+  id             String         @id @default(uuid()) @db.Uuid
+  userId         String         @map("user_id") @db.Uuid
+  connectionId   String?        @map("connection_id") @db.Uuid // null = 一括ジョブの親
+  parentRunId    String?        @map("parent_run_id") @db.Uuid // 一括ジョブ配下の子
+  status         SyncRunStatus  @default(queued)
+  progress       Int            @default(0) // 0..100
+  itemsTotal     Int            @default(0) @map("items_total")
+  itemsProcessed Int            @default(0) @map("items_processed")
+  cursor         String?        // 分割実行のための継続トークン
+  errorMessage   String?        @map("error_message")
+  startedAt      DateTime?      @map("started_at")
+  finishedAt     DateTime?      @map("finished_at")
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
+
+  connection Connection? @relation(fields: [connectionId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([status])
+  @@map("sync_runs")
+}
+
+// ===== Report Templates =====
+enum ReportPeriod {
+  today
+  week
+  month
+  custom
+}
+
+model ReportTemplate {
+  id        String       @id @default(uuid()) @db.Uuid
+  userId    String       @map("user_id") @db.Uuid
+  name      String
+  period    ReportPeriod @default(today)
+  body      String       @db.Text
+  isDefault Boolean      @default(false) @map("is_default")
+  createdAt DateTime     @default(now()) @map("created_at")
+  updatedAt DateTime     @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("report_templates")
+}
+
+model ReportHistory {
+  id           String    @id @default(uuid()) @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  templateName String    @map("template_name")
+  body         String    @db.Text
+  periodStart  DateTime? @map("period_start") @db.Date
+  periodEnd    DateTime? @map("period_end") @db.Date
+  generatedAt  DateTime  @default(now()) @map("generated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, generatedAt])
+  @@map("report_history")
+}
+
+// ===== User Settings =====
+model UserSettings {
+  userId    String   @id @map("user_id") @db.Uuid
+  theme     String   @default("auto") // light / dark / auto
+  locale    String   @default("ja")
+  filters   Json     @default("{}")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_settings")
 }
 ```
 
-#### 3.4.2 カタログ（宣言データ）
+### 3.2 補助マイグレーション SQL
 
-```swift
-enum IntegrationCatalog {
-    static let entries: [IntegrationDisplayMeta] = [
-        NotionProvider.displayMetadata,
-        GoogleSheetsProvider.displayMetadata,
-        // Coming Soon（プロバイダー未実装）
-        .comingSoon(.jira, name: "JIRA", icon: "jira"),
-        .comingSoon(.linear, name: "Linear", icon: "linear"),
-        .comingSoon(.asana, name: "Asana", icon: "asana"),
-        .comingSoon(.trello, name: "Trello", icon: "trello"),
-        .comingSoon(.githubIssues, name: "GitHub Issues", icon: "github"),
-    ]
+Prisma で表現できない以下を、生 SQL マイグレーションで補う。
 
-    static func provider(for kind: IntegrationKind) -> (any IntegrationProvider)? {
-        switch kind {
-        case .notion: return NotionProvider()
-        case .googleSheets: return GoogleSheetsProvider()
-        default: return nil       // Coming Soon
-        }
+```sql
+-- 1) インボックスは1ユーザーに1つだけ
+CREATE UNIQUE INDEX uniq_user_inbox_partial
+  ON task_lists(user_id) WHERE is_inbox = true;
+
+-- 2) tasks.search_vector の自動生成
+ALTER TABLE tasks
+  ADD COLUMN IF NOT EXISTS search_vector tsvector
+  GENERATED ALWAYS AS (
+    setweight(to_tsvector('simple', coalesce(title,'')), 'A') ||
+    setweight(to_tsvector('simple', coalesce(memo,'')),  'B')
+  ) STORED;
+CREATE INDEX idx_tasks_search_vector ON tasks USING GIN (search_vector);
+
+-- 3) Row Level Security
+ALTER TABLE projects         ENABLE ROW LEVEL SECURITY;
+ALTER TABLE task_lists       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tasks            ENABLE ROW LEVEL SECURITY;
+ALTER TABLE subtasks         ENABLE ROW LEVEL SECURITY;
+ALTER TABLE tags             ENABLE ROW LEVEL SECURITY;
+ALTER TABLE task_tags        ENABLE ROW LEVEL SECURITY;
+ALTER TABLE connections      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sync_records     ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sync_runs        ENABLE ROW LEVEL SECURITY;
+ALTER TABLE report_templates ENABLE ROW LEVEL SECURITY;
+ALTER TABLE report_history   ENABLE ROW LEVEL SECURITY;
+ALTER TABLE user_settings    ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "own rows" ON projects
+  FOR ALL TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+-- 同様のポリシーを他テーブルにも作成
+
+-- 4) インボックス保護: 削除・リネーム禁止
+CREATE OR REPLACE FUNCTION protect_inbox() RETURNS trigger AS $$
+BEGIN
+  IF TG_OP = 'DELETE' AND OLD.is_inbox THEN
+    RAISE EXCEPTION 'inbox cannot be deleted';
+  END IF;
+  IF TG_OP = 'UPDATE' AND OLD.is_inbox AND NEW.name <> OLD.name THEN
+    RAISE EXCEPTION 'inbox cannot be renamed';
+  END IF;
+  RETURN NEW;
+END $$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_protect_inbox
+BEFORE UPDATE OR DELETE ON task_lists
+FOR EACH ROW EXECUTE FUNCTION protect_inbox();
+
+-- 5) ステータスと isCompleted の整合性(二重保険)
+CREATE OR REPLACE FUNCTION sync_task_completion() RETURNS trigger AS $$
+BEGIN
+  IF NEW.status = 'completed' THEN NEW.is_completed := true;
+  ELSIF NEW.is_completed = false AND OLD.is_completed = true THEN
+    NEW.status := 'not_started';
+  END IF;
+  RETURN NEW;
+END $$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_sync_task_completion
+BEFORE INSERT OR UPDATE ON tasks
+FOR EACH ROW EXECUTE FUNCTION sync_task_completion();
+```
+
+### 3.3 主要な制約とその実装場所
+
+| 制約 | 実装場所 |
+|------|---------| 
+| `(connectionId, externalId)` 一意 | Prisma `@@unique` + DB UNIQUE 制約 |
+| インボックス 1 ユーザー 1 件 | 部分ユニーク INDEX |
+| インボックス削除・リネーム禁止 | DB トリガー + Service 層 二重防御 |
+| ステータス↔isCompleted 同期 | DB トリガー + Service 層 |
+| ユーザー越境アクセス禁止 | RLS + Service 層 `where: { userId }` 強制 |
+| シークレットを返さない | DTO 変換層で `vaultSecretId` を除外 |
+
+---
+
+## 4. API コントラクト
+
+すべて Next.js Route Handlers (`app/api/**/route.ts`)。RSC + Server Actions も併用。
+共通レスポンス規約：
+
+```ts
+// 成功
+{ data: T }
+// エラー
+{ error: { code: string; message: string; details?: unknown } }
+```
+
+### 4.1 認証
+
+| Method | Path | 説明 |
+|---|---|---|
+| POST | `/api/auth/magic-link` | Magic Link 送信（allowlist 検証込み） |
+| GET  | `/api/auth/callback` | Supabase Auth コールバック |
+| POST | `/api/auth/signout` | サインアウト |
+
+### 4.2 Projects / Lists
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET | `/api/projects` | プロジェクト一覧 |
+| POST | `/api/projects` | 作成 `{name, color, icon?}` |
+| PATCH | `/api/projects/:id` | 更新 |
+| DELETE | `/api/projects/:id` | 削除（カスケード） |
+| GET | `/api/projects/:id/lists` | リスト一覧 |
+| POST | `/api/lists` | 作成 `{projectId, name}` |
+| PATCH | `/api/lists/:id` | 更新（インボックス name 変更不可） |
+| DELETE | `/api/lists/:id` | 削除（インボックス削除不可） |
+
+### 4.3 Tasks
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET | `/api/tasks?listId=&status=&tag=&dueRange=&q=&sort=&dir=&cursor=` | 一覧（カーソルページング、検索/フィルタ統合） |
+| GET | `/api/tasks/today` | 本日の進捗ビュー (FR-06c) |
+| POST | `/api/tasks` | 作成 |
+| GET | `/api/tasks/:id` | 詳細 |
+| PATCH | `/api/tasks/:id` | 部分更新（status, progress, workHoursByDate.YYYY-MM-DD 等） |
+| DELETE | `/api/tasks/:id` | 削除 |
+| POST | `/api/tasks/:id/move` | リスト移動 `{taskListId}` |
+| POST | `/api/tasks/bulk-update` | 一括ステータス変更 |
+
+### 4.4 Subtasks
+
+| Method | Path | 説明 |
+|---|---|---|
+| POST | `/api/tasks/:id/subtasks` | 追加 |
+| PATCH | `/api/subtasks/:id` | 更新 |
+| DELETE | `/api/subtasks/:id` | 削除 |
+| POST | `/api/subtasks/reorder` | 並び替え `{taskId, orderedIds}` |
+
+### 4.5 Tags
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET / POST | `/api/tags` | 一覧 / 作成 |
+| PATCH / DELETE | `/api/tags/:id` | 更新 / 削除 |
+| POST | `/api/tasks/:id/tags` | 紐付け |
+| DELETE | `/api/tasks/:id/tags/:tagId` | 解除 |
+
+### 4.6 Connections
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET | `/api/integrations/catalog` | カタログ（実装済み + Coming Soon） |
+| GET | `/api/connections` | 一覧 |
+| POST | `/api/connections` | 作成（シークレットは即 Vault 投入） |
+| PATCH | `/api/connections/:id` | 編集（シークレット再送信時のみ Vault 更新） |
+| DELETE | `/api/connections/:id` | 削除 |
+| POST | `/api/connections/:id/test` | 疎通確認 |
+| GET | `/api/connections/:id/gsheet-columns` | GSheet 列マッピング補助 |
+
+### 4.7 OAuth (Google)
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET | `/api/oauth/google/start?connectionDraftId=` | PKCE 生成 → Google 認可ページへ |
+| GET | `/api/oauth/google/callback` | コード → トークン交換 → Vault 保存 |
+
+### 4.8 Sync
+
+| Method | Path | 説明 |
+|---|---|---|
+| POST | `/api/sync` | 一括同期キック → 親 `SyncRun` 作成、子 Run を順次起動 |
+| POST | `/api/sync/:connectionId` | 単一接続の同期 |
+| POST | `/api/sync/runs/:runId/cancel` | 進行中ジョブ中断 |
+| POST | `/api/sync/runs/:runId/resume` | 分割実行の継続（cursor から再開、内部呼び出し用） |
+| GET | `/api/sync/runs?limit=20` | 履歴 |
+| POST | `/api/sync/runs/:runId/resolve-deletions` | 外部削除タスクへの判断 `{taskIds, action:"delete"\|"archive"}` |
+| GET | `/api/cron/sync` | Vercel Cron 起動エンドポイント（`Authorization: Bearer ${CRON_SECRET}`） |
+
+### 4.9 Reports
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET / POST | `/api/report-templates` | 一覧 / 作成 |
+| PATCH / DELETE | `/api/report-templates/:id` | 更新 / 削除 |
+| POST | `/api/reports/preview` | プレビュー `{templateId, periodStart?, periodEnd?}` |
+| POST | `/api/reports/generate` | 生成 + 履歴保存 |
+| GET | `/api/reports/history?templateName=&from=&to=` | 履歴一覧 |
+| GET | `/api/reports/history/:id` | 履歴詳細 |
+
+### 4.10 Backup
+
+| Method | Path | 説明 |
+|---|---|---|
+| GET | `/api/export` | 全データ JSON ダウンロード（トークン除外） |
+| POST | `/api/import` | JSON インポート |
+
+---
+
+## 5. アーキテクチャ図
+
+```
+┌─────────────────────────── Browser (PC / Mobile) ────────────────────────────┐
+│  Next.js App Router (Client)                                                  │
+│  ├─ Server Components (一覧の初期描画)                                          │
+│  ├─ Client Components (編集UI / shadcn/ui)                                     │
+│  ├─ TanStack Query (cache / optimistic update)                                │
+│  ├─ Zustand (UI state: 選択中タスク / モーダル開閉)                              │
+│  └─ Supabase Realtime Client (tasks / subtasks / sync_runs 購読)               │
+└────────────┬─────────────────────────────────────────┬──────────────────────-─┘
+             │ HTTPS (RSC fetch / Server Actions / API)│ WSS (Realtime)
+             ▼                                         ▼
+┌────────────────────────────── Vercel ─────────────────────────────────────────┐
+│  Next.js Server (Node Runtime)                                                 │
+│  ├─ Route Handlers (/api/**)        ─── Zod 検証 → Service → Repository         │
+│  ├─ Server Actions                  ─── 同上                                    │
+│  ├─ Middleware: 認証ガード + allowlist 検証                                       │
+│  ├─ Services: TaskService / SyncService / ReportService / VariableRenderer     │
+│  ├─ Repositories: Prisma ベース                                                 │
+│  ├─ Providers: NotionProvider / GSheetProvider (IntegrationProvider IF)        │
+│  └─ Cron Handlers: GET /api/cron/sync (Vercel Cron が定期呼び出し)               │
+│                                                                                │
+│  Vercel Cron Scheduler ─── 定期的に /api/cron/sync を Bearer 認証で呼び出す      │
+└─────────┬───────────────────────────────────────┬──────────────────────────────┘
+          │ Prisma                                │ Vault RPC
+          ▼                                       ▼
+┌──────────────────── Supabase ────────────────────┐
+│ Postgres (RLS 有効)                                │
+│   ├ tables (projects, tasks, sync_runs, ...)      │
+│   └ search_vector (tsvector + GIN)                │
+│ Realtime (Postgres Changes)                       │
+│ Auth (Magic Link)                                  │
+│ Vault (pgsodium) ─── encrypted connection secrets │
+└────────────────────────────────────────────────────┘
+                       ▲
+                       │ HTTPS
+                       │
+                Notion API / Google Sheets API（外部 SaaS）
+```
+
+### 5.1 楽観的 UI 更新フロー
+
+```
+[User clicks status dropdown "進行中"]
+   ↓
+Client: TanStack Query mutation
+   ├─ onMutate: cache を即座に更新（UI即反映 200ms以内）
+   ├─ fetch PATCH /api/tasks/:id { status: "in_progress" }
+   │     Server: Zod → TaskService.updateStatus → Prisma → Postgres
+   │     Postgres CDC → Supabase Realtime → 他端末へ push
+   ├─ onError: cache ロールバック + Toast「保存失敗 リトライ」
+   └─ onSettled: invalidateQueries(["tasks"])
+```
+
+### 5.2 同期ジョブのフロー（Vercel Cron + 自前 SyncRun）
+
+```
+[手動同期] POST /api/sync
+[定期同期] Vercel Cron → GET /api/cron/sync (Bearer 認証)
+   ↓
+SyncService.startBulkSync(userId)
+   ├─ 親 SyncRun(connectionId=null, status=queued) を作成
+   ├─ 有効な connection を取得し、それぞれ子 SyncRun(queued) を作成
+   └─ 子 SyncRun を「1接続ずつ順次」処理:
+        ├─ 子 SyncRun を running に更新 → Realtime 配信
+        ├─ Vault から credentials を復号
+        ├─ Provider.fetchAssignedTasks(cursor) を呼び出し
+        │   - Notion: 3 req/sec RateLimiter
+        │   - GSheet: 60 req/min RateLimiter
+        │   - Exponential Backoff リトライ
+        ├─ 取得タスクを upsert: (connectionId, externalId) でユニーク判定
+        │   - 新規 → インボックスへ追加
+        │   - 既存 → タイトル・メモ・期限を上書き、status/progress は保持
+        │   - 外部側削除分は別途記録（resolve-deletions API で処理）
+        ├─ itemsProcessed / progress を更新 → Realtime 配信
+        └─ 50秒経過時点で未完了なら:
+             - cursor を SyncRun.cursor に保存
+             - status は running のまま終了
+             - 続きは「/api/sync/runs/:runId/resume」で再開
+               (起動側: 手動同期はクライアントが再呼び出し、定期同期は次回 Cron が拾う)
+   ↓
+全子 Run 完了で親 Run を succeeded / partial / failed に確定
+最終同期日時とサマリーを UI のフッターに表示 (Realtime)
+```
+
+#### 60秒制限への対応設計
+
+- 各子 `SyncRun` は **最大 50 秒で自主終了**（Vercel 上限 60 秒の安全マージン）
+- 続きは `cursor` カラムに保存し、次回起動で `resume` する
+- 一度の Cron 起動で処理しきれない場合は、次回の Cron で queued / running(中断) 状態の Run を拾って継続
+- 並列化はしない（複雑度を抑え、レート制限を超えにくくする）
+
+### 5.3 エラーハンドリング戦略
+
+| 層 | 戦略 |
+|----|------|
+| View | TanStack Query の `onError` で Toast 表示。永続失敗時のみ Sentry へ |
+| Route Handler | `try/catch` で `AppError` に変換し `{error}` レスポンスを返す |
+| Service | `ValidationError` / `NotFoundError` / `ExternalApiError` / `RateLimitError` の具体型 |
+| Provider | HTTP エラーは `ExternalApiError`、レート制限は `RateLimitError`（リトライ可能） |
+| Sync ジョブ | 接続単位で失敗を許容（partial 状態）。成功分はロールバックしない |
+| ログ | `pino` で JSON 構造化、トークン・個人情報は自動マスク |
+
+---
+
+## 6. レイヤー構成とディレクトリ構造
+
+### 6.1 採用パターン
+
+**MVVM + Repository + Service Layer**（macOS 版から踏襲、Next.js 文脈に合わせて調整）
+
+| レイヤー | 責務 | 禁止事項 |
+|---------|------|---------| 
+| View (Server / Client Component) | 表示と入力イベント発火 | Prisma 直接アクセス禁止、API 呼び出しは hook 経由 |
+| Hook (TanStack Query / Zustand) | 画面状態保持、API 呼び出し | UI ロジックを内部に閉じない |
+| Route Handler / Server Action | Zod 検証 → Service 呼び出し → DTO 整形 | ビジネスロジック禁止 |
+| Service | 複数 Repository / Provider の協調、ユースケース | View / Hook への参照禁止 |
+| Repository | Prisma のラッパー（ユーザー越境チェック含む） | ビジネスロジック禁止 |
+| IntegrationProvider | 外部ツール固有の API 実装 | 直接 DB 操作禁止 |
+
+依存方向（一方向のみ）：
+
+```
+View → Hook → Route Handler / Server Action → Service → Repository → Prisma
+                                                     ↘ IntegrationProvider → HTTPClient / Vault
+```
+
+### 6.2 ディレクトリ構造
+
+```
+src/
+├─ app/
+│   ├─ (auth)/login/page.tsx               # Magic Link 入力 (Server Component)
+│   ├─ (app)/                              # 認証必須レイアウト
+│   │   ├─ layout.tsx                      # 認証ガード + Sidebar
+│   │   ├─ today/page.tsx                  # FR-06c 本日の進捗
+│   │   ├─ inbox/page.tsx
+│   │   ├─ projects/[id]/lists/[listId]/page.tsx
+│   │   ├─ search/page.tsx
+│   │   ├─ reports/
+│   │   │   ├─ page.tsx                    # 生成
+│   │   │   ├─ templates/page.tsx
+│   │   │   └─ history/page.tsx
+│   │   └─ settings/
+│   │       ├─ integrations/page.tsx       # カタログ
+│   │       ├─ connections/[id]/page.tsx
+│   │       └─ tags/page.tsx
+│   ├─ api/                                # §4 の API
+│   │   ├─ auth/
+│   │   ├─ projects/
+│   │   ├─ tasks/
+│   │   ├─ subtasks/
+│   │   ├─ tags/
+│   │   ├─ connections/
+│   │   ├─ oauth/google/
+│   │   ├─ sync/
+│   │   ├─ cron/sync/                      # Vercel Cron エンドポイント
+│   │   ├─ report-templates/
+│   │   ├─ reports/
+│   │   ├─ export/
+│   │   └─ import/
+│   └─ middleware.ts                       # 認証 + allowlist
+├─ components/                             # 純粋 UI (shadcn ベース)
+│   ├─ ui/                                 # shadcn 生成物
+│   ├─ tasks/TaskRow.tsx
+│   ├─ tasks/TaskStatusDropdown.tsx
+│   └─ reports/TemplateEditor.tsx
+├─ features/                               # 機能ドメイン (View + Hook)
+│   ├─ tasks/
+│   │   ├─ hooks/useTasksQuery.ts
+│   │   └─ hooks/useUpdateTaskMutation.ts
+│   ├─ sync/
+│   │   └─ hooks/useSyncRun.ts             # Realtime 購読
+│   └─ reports/
+├─ server/                                 # サーバー専用 (import 'server-only')
+│   ├─ services/
+│   │   ├─ TaskService.ts
+│   │   ├─ SyncService.ts
+│   │   ├─ ReportService.ts
+│   │   └─ VariableRenderer.ts             # {{...}} 展開
+│   ├─ repositories/
+│   │   ├─ TaskRepository.ts
+│   │   ├─ ConnectionRepository.ts
+│   │   └─ SyncRunRepository.ts
+│   ├─ integrations/
+│   │   ├─ IntegrationProvider.ts          # IF
+│   │   ├─ NotionProvider.ts
+│   │   ├─ GSheetProvider.ts
+│   │   └─ RateLimiter.ts                  # token bucket
+│   ├─ auth/
+│   │   ├─ supabase.ts
+│   │   └─ allowlist.ts
+│   ├─ vault/EncryptedSecrets.ts           # Supabase Vault ラッパ
+│   ├─ cron/                               # Vercel Cron 用ハンドラ
+│   │   └─ syncCron.ts
+│   └─ db/prisma.ts
+├─ lib/
+│   ├─ schemas/                            # Zod (クライアント・サーバー共用)
+│   ├─ utils/dates.ts
+│   └─ utils/markdown.ts
+└─ styles/globals.css
+```
+
+### 6.3 ファイルサイズ規約
+
+- 通常: 200〜400 行
+- 上限: 800 行（超えたら機能別に分割）
+- 関数: 50 行以内
+
+---
+
+## 7. セキュリティ設計
+
+### 7.1 認証 / アクセス制御
+
+- Supabase Auth Magic Link
+- `middleware.ts` で `(app)` 配下と `/api/*`（auth 系を除く）にセッション必須
+- `server/auth/allowlist.ts` で `process.env.ALLOWED_EMAILS.split(",")` に含まれるメールのみ許可（R1 対策）
+- Magic Link 送信前 / コールバック後の二段階で allowlist 検証
+- セッションは Supabase の HTTP-Only Cookie（SameSite=Lax, Secure）
+
+### 7.2 Row Level Security (RLS)
+
+- 全業務テーブルで `user_id = auth.uid()` のポリシーを必須化
+- Prisma はサービスロールキーを使うため、**Service レイヤーで必ず `where: { userId }` を強制**
+- `withUser(handler)` HOF で Service 関数の第一引数を `(ctx: { userId })` に統一
+
+### 7.3 シークレット管理 (Q7)
+
+- 接続作成時: `vault.create_secret(plaintext)` で Vault に格納、返却された `secret_id` を `connections.vault_secret_id` に保存
+- 復号は同期ジョブ実行時のみ `vault.decrypted_secrets` ビューから取得
+- クライアントへ返却する `Connection` DTO は `vaultSecretId` を必ず除外
+- OAuth `client_secret` / Notion 用テンプレ：`process.env.GOOGLE_CLIENT_SECRET` 等、サーバー側のみ参照
+
+### 7.4 HTTPS / トランスポート
+
+- Vercel デフォルトで HTTPS 強制
+- 外部 API 通信も HTTPS のみ（Provider 実装内で `https:` 以外を弾くガード）
+
+### 7.5 入力検証
+
+- すべての Route Handler / Server Action は冒頭で Zod パース
+- 失敗時は `400 { error: { code: "validation_error", details } }`
+- ID は UUID 形式、`progress` は `z.number().int().min(0).max(100)` 等
+
+### 7.6 OAuth (Google) フロー
+
+- `state` + `code_verifier`（PKCE）を HTTP-Only Cookie に保存
+- `state` 検証失敗時は拒否
+- リダイレクト URI は `${APP_BASE_URL}/api/oauth/google/callback` のみホワイトリスト
+- スコープは最小: `https://www.googleapis.com/auth/spreadsheets.readonly`
+- アクセストークン + リフレッシュトークンを Vault へ
+
+### 7.7 レート制限・乱用対策
+
+- 同一ユーザーで同時実行中の親 SyncRun は 1 つに制限（Service 層で running を判定）
+- 外部 API 側: `RateLimiter`（token bucket）で Notion 3 req/sec、GSheet 60 req/min
+- Cron エンドポイントは `Authorization: Bearer ${CRON_SECRET}` で保護
+
+### 7.8 監査ログ
+
+- `audit_log` テーブルを任意で追加
+- 記録対象: `connection.create` / `connection.delete` / `oauth.granted` / `import.executed` / `export.executed`
+- ログにトークン本文は含めない（接続名と種別のみ）
+
+### 7.9 XSS / CSRF
+
+- Server Actions は CSRF トークン同梱（Origin 検証）
+- Markdown レンダリング時は DOMPurify でサニタイズ
+
+### 7.10 ログ
+
+- `pino` で JSON 構造化
+- トークン・個人情報はマスク（ロガーミドルウェアで `Authorization` 等を自動除去）
+
+---
+
+## 8. パフォーマンス設計
+
+| 要件 | 設計 |
+|------|------|
+| 初回ページロード LCP p95 < 2.5s | Server Components で初回 HTML を SSR、Hydration 後に Realtime 接続開始 |
+| ページ間ナビゲーション p95 < 300ms | Next.js のクライアントナビゲーション + Prefetch |
+| タスク一覧描画 1,000 件 | `@tanstack/react-virtual` で仮想スクロール |
+| 全文検索 5,000 件 p95 < 300ms | Postgres `tsvector` GIN + `websearch_to_tsquery` |
+| 同期処理 100 タスク 5 秒以内 | RateLimiter + バッチ upsert（Provider 単位の最適化） |
+| API レスポンス CRUD p95 < 200ms | Prisma の効率的クエリ、index 最適化 |
+| 楽観的 UI 更新 | TanStack Query `onMutate` で API レスポンス前に反映 |
+| ページネーション | カーソルベース (`created_at, id`) |
+
+---
+
+## 9. 開発・運用
+
+### 9.1 環境変数
+
+| 変数 | 用途 |
+|------|------|
+| `DATABASE_URL` | Prisma 接続（Supabase Pooler 経由） |
+| `DIRECT_URL` | Prisma migrate 用（Supabase Direct） |
+| `SUPABASE_URL` | Supabase プロジェクト URL |
+| `SUPABASE_ANON_KEY` | クライアント用 anon key |
+| `SUPABASE_SERVICE_ROLE_KEY` | サーバー側 Vault / 管理操作用 |
+| `ALLOWED_EMAILS` | カンマ区切りメールアドレス allowlist |
+| `APP_BASE_URL` | OAuth リダイレクト URI 構築用 |
+| `GOOGLE_CLIENT_ID` | Google OAuth |
+| `GOOGLE_CLIENT_SECRET` | Google OAuth |
+| `CRON_SECRET` | Vercel Cron 認証用 Bearer トークン |
+| `SENTRY_DSN` | Sentry（任意） |
+
+### 9.2 Vercel Cron 設定（`vercel.json`）
+
+```json
+{
+  "crons": [
+    {
+      "path": "/api/cron/sync",
+      "schedule": "*/30 * * * *"
     }
+  ]
 }
 ```
 
-新ツール追加は「Provider 実装 + Catalog エントリ追加」のみで UI に反映される。
+- 30 分ごとに `/api/cron/sync` を起動（個人利用前提のスケジュール、後で調整可）
+- ハンドラ側で `Authorization: Bearer ${CRON_SECRET}` を検証
+- 進行中（running）または queued の SyncRun を拾って継続処理
 
-#### 3.4.3 NotionProvider 実装アウトライン
+### 9.3 バックアップ
 
-```swift
-struct NotionProvider: IntegrationProvider {
-    static let kind: IntegrationKind = .notion
-    static let displayMetadata = IntegrationDisplayMeta(
-        id: .notion, name: "Notion", iconAssetName: "notion",
-        isComingSoon: false, description: "Integration Token で接続",
-        docsURL: URL(string: "https://developers.notion.com/")
-    )
+- Supabase Free のバックアップ機能 + JSON エクスポート（FR-12）で二重化
+- 将来は GitHub Actions で日次ダンプを取得する任意の運用を検討
 
-    let httpClient: HTTPClient
-    let rateLimiter: RateLimiter  // 3 req/sec actor
+### 9.4 CI
 
-    func authenticate(existing: Connection?) async throws -> AuthResult {
-        // UI でユーザーが Integration Token を入力 → Keychain 保存
-        // /users/me を叩いて Notion ユーザー ID を取得して meIdentifier に
-    }
+- GitHub Actions: `pnpm typecheck && pnpm lint && pnpm test && pnpm prisma migrate deploy`
+- E2E（Playwright）は主要フローのみ（インボックス・本日ビュー・レポート生成）
 
-    func testConnection(_ c: Connection) async throws {
-        let token = try KeychainStore.shared.read(ref: c.keychainRef)
-        try await httpClient.get("/v1/users/me", auth: .bearer(token))
-    }
+### 9.5 デプロイ
 
-    func fetchAssignedTasks(
-        connection c: Connection,
-        progress: @Sendable (Double) -> Void
-    ) async throws -> [ExternalTaskDTO] {
-        let config = try JSONDecoder().decode(NotionConfig.self, from: c.configJSON)
-        let token = try KeychainStore.shared.read(ref: c.keychainRef)
+- `develop` → Vercel Preview
+- `main` → Vercel Production
+- マイグレーションは Vercel デプロイ前に手動 or CI で `prisma migrate deploy`
 
-        // databases/{id}/query をページング、filter: People プロパティに c.meIdentifier を含む
-        var cursor: String? = nil
-        var allPages: [NotionPage] = []
-        repeat {
-            try await rateLimiter.wait()
-            let result = try await httpClient.post(
-                "/v1/databases/\(config.databaseId)/query",
-                body: NotionQueryBody(
-                    startCursor: cursor,
-                    filter: .peopleContains(
-                        propertyName: config.assigneeProperty,
-                        userId: c.meIdentifier
-                    )
-                ),
-                auth: .bearer(token),
-                retryPolicy: .exponentialBackoff(maxRetries: 5)
-            )
-            allPages.append(contentsOf: result.results)
-            cursor = result.nextCursor
-            progress(Double(allPages.count) / Double(result.totalEstimate ?? allPages.count + 1))
-        } while cursor != nil
+### 9.6 監視・観測性
 
-        return allPages.map { Self.toDTO($0) }
-    }
-}
-```
+- Vercel Analytics 標準
+- Sentry は MVP では任意（必要に応じて後追い）
+- 同期ジョブの実行履歴は `sync_runs` テーブルで参照可能
 
-**マッピング規則**:
-- Notion `Status` プロパティ → `TaskStatus`（マッピング表は接続設定で調整可能）
-- Notion `Due Date` → `dueDate`
-- 子ページ / Toggle list block を `Subtask` として取込（オプション）
+### 9.7 将来の移行ポイント
 
-#### 3.4.4 GoogleSheetsProvider 実装アウトライン
-
-```swift
-struct GoogleSheetsProvider: IntegrationProvider {
-    static let kind: IntegrationKind = .googleSheets
-    static let displayMetadata = IntegrationDisplayMeta(
-        id: .googleSheets, name: "Google スプレッドシート",
-        iconAssetName: "gsheet", isComingSoon: false,
-        description: "OAuth 2.0 で接続",
-        docsURL: URL(string: "https://developers.google.com/sheets/api")
-    )
-
-    let oauth: GoogleOAuthService
-
-    func authenticate(existing: Connection?) async throws -> AuthResult {
-        // 1. AuthorizationCodeRequest を構築（scope: spreadsheets.readonly）
-        // 2. ASWebAuthenticationSession でブラウザ起動、callbackURLScheme: "taskhub"
-        // 3. code を受け取り、token endpoint で access_token + refresh_token を取得
-        // 4. Keychain に { accessToken, refreshToken, expiresAt, clientId } を JSON 保存
-        let tokens = try await oauth.runAuthorizationCodeFlow()
-        let ref = try KeychainStore.shared.write(tokens: tokens, scope: .connection(UUID()))
-        return AuthResult(keychainRef: ref, meIdentifier: nil)
-        // meIdentifier（担当者列の値）は別途ユーザーが手動入力
-    }
-
-    func fetchAssignedTasks(
-        connection c: Connection,
-        progress: @Sendable (Double) -> Void
-    ) async throws -> [ExternalTaskDTO] {
-        let config = try JSONDecoder().decode(GSheetConfig.self, from: c.configJSON)
-        let token = try await oauth.validAccessToken(ref: c.keychainRef)  // 必要なら refresh
-
-        // values.get で全行取得
-        let range = "\(config.sheetName)!A1:Z"
-        let resp = try await httpClient.get(
-            "https://sheets.googleapis.com/v4/spreadsheets/\(config.spreadsheetId)/values/\(range)",
-            auth: .bearer(token)
-        )
-
-        // ヘッダー行 + 列マッピング設定で抽出
-        // 担当者列の値が c.meIdentifier と一致する行のみ採用
-        return resp.rows
-            .filter { $0[config.assigneeColumn] == c.meIdentifier }
-            .map { Self.rowToDTO($0, config: config) }
-    }
-}
-```
-
-**列マッピング設定**: 接続編集画面で「担当者列 / タイトル列 / メモ列 / 期限列 / ステータス列 / 優先度列」を A-Z で指定（R6 対応）。
-
-#### 3.4.5 OAuth 2.0 フロー（Google）
-
-```
-[アプリ] --1.認可URL構築--> ブラウザ起動 (ASWebAuthenticationSession)
-                              ↓
-[ユーザー] -- 2.Google にログイン & 許可
-                              ↓
-[Google] -- 3.taskhub://oauth/callback?code=XXX にリダイレクト
-                              ↓
-[アプリ] -- 4.受信した code を token endpoint と交換
-        -- 5.access_token + refresh_token を Keychain 保存
-        -- 6.以降の API 呼び出しは access_token、期限切れは refresh_token で更新
-```
-
-- カスタム URL スキーム `taskhub` を Info.plist `CFBundleURLTypes` に登録
-- Google Cloud Console で OAuth クライアント（Desktop App）を作成し、`client_id` のみコード埋め込み（`client_secret` も Desktop App では公開前提のため Keychain 不要）
-- PKCE 利用（`code_challenge` / `code_verifier`）でセキュリティ強化
-
-#### 3.4.6 Notion Integration Token フロー
-
-```
-[ユーザー] -- 1.Notion で Internal Integration 作成、Token をコピー
-[ユーザー] -- 2.対象データベースに Integration を Connect
-[アプリ] -- 3.接続編集画面で Token を SecureField で入力
-[アプリ] -- 4.「接続テスト」ボタンで /users/me を叩き疎通確認
-[アプリ] -- 5.Keychain に Token を保存、meIdentifier として返ってきた user ID を保存
-```
-
-#### 3.4.7 並列同期パターン（TaskGroup）
-
-```swift
-actor SyncService {
-    func syncAll() async -> SyncSummary {
-        let enabledConnections = try repository.fetchEnabledConnections()
-        var results: [SyncResult] = []
-
-        await withTaskGroup(of: SyncResult.self) { group in
-            for connection in enabledConnections {
-                group.addTask {
-                    do {
-                        guard let provider = IntegrationCatalog.provider(for: connection.kind)
-                        else { return .skipped(connection.id) }
-
-                        let externals = try await provider.fetchAssignedTasks(
-                            connection: connection,
-                            progress: { self.publishProgress(connection.id, $0) }
-                        )
-                        try await self.reconcile(connection: connection, externals: externals)
-                        return .success(connection.id, count: externals.count)
-                    } catch is CancellationError {
-                        return .cancelled(connection.id)
-                    } catch {
-                        return .failure(connection.id, error: error)
-                    }
-                }
-            }
-            for await result in group { results.append(result) }
-        }
-
-        return SyncSummary(results: results)
-    }
-}
-```
-
-- 各接続のタスクは **独立した Task** として並列実行
-- `CancellationError` を補足し中断（ツールバー「中断」ボタンと連動）
-- 1接続失敗時も他は続行（部分失敗を許容）
-
-#### 3.4.8 エラー / 部分失敗ハンドリング
-
-| エラー種別 | UI 表示 | データ扱い |
-|----------|--------|-----------|
-| 認証失敗（401） | トースト「接続 X：認証エラー、設定を確認してください」 | その接続のみスキップ |
-| レート制限（429） | 自動 Exponential Backoff（5回まで） | リトライ後失敗で部分失敗扱い |
-| ネットワーク | トースト「ネットワーク到達不可」 | 部分失敗扱い、成功分はコミット |
-| 設定不正（DB ID 不在） | サマリーパネルに詳細表示 | スキップ |
-| キャンセル | ステータス「中断」 | 中断時点まで取得分をコミット |
-| 外部削除検出 | 確認ダイアログ S-16 で一括選択 | ユーザー選択に従う |
-
-同期中に書き込み中の `ModelContext` は 1接続単位でトランザクション化し、失敗時はその接続分のみロールバック。
+| トリガー | 移行先 |
+|---------|------|
+| 接続数が増え順次実行で間に合わない | Inngest 導入（Service 層の起動部分のみ差し替え） |
+| 同時ユーザー対応 | allowlist を解除、Auth プロバイダ追加 |
+| 検索が遅くなる | `pg_bigm` 拡張 or Meilisearch 連携 |
+| バックアップ要件強化 | Supabase Pro（PITR）へアップグレード |
 
 ---
 
-### 3.5 レポートエンジン設計
-
-#### 3.5.1 テンプレート保存形式
-
-**採用**: **プレーンテキスト + `{{変数名}}` プレースホルダー**（ADR-004 参照）
-
-```text
-【{{date}}業務報告】
-■今日やったこと: 計{{today.totalHours}}h
-{{today.workLog}}
-
-■明日やること
-{{next.tasks}}
-```
-
-- `ReportTemplate.body: String` にそのまま保存
-- 変数のシンタックスは `{{ identifier }}`（空白は許容、識別子は `[a-zA-Z][a-zA-Z0-9.]*`）
-
-#### 3.5.2 変数解決システム
-
-```swift
-protocol ReportVariable {
-    var identifier: String { get }           // 例 "today.workLog"
-    var displayName: String { get }
-    var description: String { get }
-    func render(context: ReportContext) -> String
-}
-
-struct ReportContext {
-    let now: Date
-    let periodStart: Date
-    let periodEnd: Date
-    let taskRepository: TaskRepository
-    let projectRepository: ProjectRepository
-    let calendar: Calendar
-    let locale: Locale
-}
-
-enum VariableRegistry {
-    static let all: [ReportVariable] = [
-        DateVariable(),
-        PeriodStartVariable(), PeriodEndVariable(),
-        TodayTotalHoursVariable(),
-        TodayWorkLogVariable(),
-        TodayPlanVariable(),
-        TodayCompletedVariable(),
-        TodayInProgressVariable(),
-        AssignedTasksVariable(),
-        NextTasksVariable(),
-        ProjectsSummaryVariable(),
-        PeriodCompletedVariable(),
-    ]
-
-    static func byIdentifier(_ id: String) -> ReportVariable? {
-        all.first { $0.identifier == id }
-    }
-}
-```
-
-各 Variable は単一責任クラスとして実装（1ファイル / 1Variable）：
-
-```swift
-struct TodayWorkLogVariable: ReportVariable {
-    let identifier = "today.workLog"
-    let displayName = "今日の作業ログ（工数付き）"
-
-    func render(context: ReportContext) -> String {
-        let dateKey = DateKey(from: context.now)
-        let tasksWithHours = context.taskRepository
-            .tasksWithWorkHours(on: dateKey)
-        guard !tasksWithHours.isEmpty else { return "（なし）" }
-
-        let groupedByProject = Dictionary(grouping: tasksWithHours, by: \.list?.project?.name)
-        return groupedByProject
-            .sorted { ($0.key ?? "") < ($1.key ?? "") }
-            .map { renderProjectGroup($0.key, tasks: $0.value) }
-            .joined(separator: "\n")          // workLog はプロジェクト間空行なし
-    }
-
-    private func renderProjectGroup(_ name: String?, tasks: [Task]) -> String {
-        // プロジェクト名 + (workHours)h
-        // ● タスク名
-        //   ○ サブタスク
-        // フォーマットを構築
-        var lines: [String] = []
-        let totalHours = tasks.reduce(0.0) { $0 + ($1.workHoursByDate[DateKey(from: Date())] ?? 0) }
-        if let n = name {
-            lines.append("\(n) \(String(format: "%.1f", totalHours))h")
-        }
-        for task in tasks {
-            lines.append("● \(task.title)")
-            for subtask in task.subtasks.filter(\.isCompleted == false) {
-                lines.append("  ○ \(subtask.title)")
-            }
-        }
-        return lines.joined(separator: "\n")
-    }
-}
-```
-
-#### 3.5.3 出力レンダリングパイプライン
-
-```
-ReportTemplate.body
-   ↓
-TemplateParser.parse(body) → [Segment]
-   ・Segment.text("【")
-   ・Segment.variable("date")
-   ・Segment.text("業務報告】\n■今日やったこと: 計")
-   ・Segment.variable("today.totalHours")
-   ・…
-   ↓
-TemplateRenderer.render(segments, context)
-   各 variable Segment を VariableRegistry で解決して文字列化
-   未知の変数は "{{unknown}}" として保持（エラーにしない）
-   ↓
-最終文字列
-   ↓
-[クリップボードコピー / .md ファイル保存]
-   ↓
-ReportHistory.create(renderedBody, templateName, periodStart, periodEnd)
-```
-
-```swift
-enum TemplateSegment {
-    case text(String)
-    case variable(identifier: String)
-}
-
-enum TemplateParser {
-    static func parse(_ body: String) -> [TemplateSegment] {
-        // 正規表現 \{\{\s*([a-zA-Z][a-zA-Z0-9.]*)\s*\}\}
-        // でマッチ部とそれ以外を分割
-    }
-}
-
-struct TemplateRenderer {
-    let registry: [ReportVariable]
-    func render(_ segments: [TemplateSegment], context: ReportContext) -> String {
-        segments.map { seg in
-            switch seg {
-            case .text(let s): return s
-            case .variable(let id):
-                return VariableRegistry.byIdentifier(id)?.render(context: context)
-                    ?? "{{\(id)}}"
-            }
-        }.joined()
-    }
-}
-```
-
-#### 3.5.4 テンプレートエディター UX
-
-- テキストエリア横に「変数パレット」を配置
-- 変数アイコンクリック → カーソル位置に `{{identifier}}` を挿入
-- 「プレビュー」ボタンで `TemplateRenderer` を実データで実行し、別ペインに表示
-- バリデーション：未定義変数は黄色ハイライト（保存可能だが警告）
-
----
-
-### 3.6 主要データフロー
-
-#### 3.6.1 フロー1：外部同期 → インボックス着地
-
-```
-[ユーザー] ─ツールバー「同期」クリック
-   ↓
-[SyncViewModel.startSync()]
-   ↓ 進行中フラグ ON、ボタンを「中断」に変更
-[SyncService.syncAll()]
-   ↓
-[ConnectionRepository.fetchEnabledConnections()] → [C1, C2, C3]
-   ↓
-withTaskGroup:
-   ├─ Task A: NotionProvider.fetchAssignedTasks(C1) → [DTO...]
-   ├─ Task B: GoogleSheetsProvider.fetchAssignedTasks(C2) → [DTO...]
-   └─ Task C: NotionProvider.fetchAssignedTasks(C3) → [DTO...]
-       ※ 各 Task は独立、進捗を publishProgress で UI 反映
-   ↓
-[Reconciler.reconcile(connection, dtos)]   ※ 接続単位で実行
-   for each DTO:
-       既存 SyncRecord 検索（connectionId + externalId）
-       ├ なし → 新規 Task を Inbox に追加、SyncRecord 作成
-       └ あり → 既存 Task を更新
-            ・title / note / dueDate / externalUrl → 上書き
-            ・status / progress / list 所属 / tags → ローカル値保持
-            ・subtasks → external 起源のみ上書き、ローカル追加分は保持
-   外部側で消えた SyncRecord → 削除確認ダイアログにキュー
-   ↓
-[全 Task 完了] SyncSummary 生成
-   ↓
-[UI] フッターに「成功 N / 失敗 M」、トーストでエラー詳細、削除ダイアログ表示
-   ↓
-[ユーザー] 削除ダイアログで「削除/残す」を選択
-   ↓
-[TaskRepository] 削除 or isArchived = true 更新
-```
-
-#### 3.6.2 フロー2：本日の進捗 → レポート生成
-
-```
-[ユーザー] ⌘T 押下
-   ↓
-[TodayViewModel.load()]
-   ・期限日 == today OR status == .inProgress のタスクを TaskRepository から取得
-   ・プロジェクト/リストごとにグルーピング
-   ↓
-[TodayView 表示]
-   ・各タスク行で status / progress / workHours[today] を直接編集
-   ・合計作業時間 = Σ workHours[today] を画面上部に表示
-   ・サブタスク展開トグル
-   ↓
-[ユーザー] 工数入力（例：「Vercel調査」に 1.0h）
-   ↓
-[TaskRepository.update(task) { task.workHoursByDate[todayKey] = 1.0 }]
-   ↓
-[ユーザー] 「業務日報を生成」ボタン押下
-   ↓
-[ReportViewModel.open(presetTemplate: .businessDailyReport)]
-   ・テンプレート選択 = 「業務日報」（自動選択）
-   ・期間 = today
-   ↓
-[ReportService.generate(template, periodStart, periodEnd)]
-   1. ReportContext 生成（now, periodStart, periodEnd, repositories）
-   2. TemplateParser.parse(template.body) → segments
-   3. TemplateRenderer.render(segments, context) → renderedBody
-   4. ReportHistory に保存
-   ↓
-[ReportPreviewView] renderedBody を表示、ユーザー編集可
-   ↓
-[ユーザー] 「クリップボードへコピー」 or 「Markdown 保存」
-   ↓
-[PasteboardService.copy()] or [FileExportService.saveAsMarkdown()]
-   ↓
-[ReportHistory.update(renderedBody)] 最終形を再保存
-```
-
-#### 3.6.3 フロー3：再同期の冪等性
-
-```
-前提：
-   - 初回同期で Task T1 が Inbox に着地
-   - ユーザーが T1 を「Project A / List 1」へ移動
-   - ユーザーが T1 の status を inReview に手動更新
-   - 外部側で T1 のタイトルが更新された
-
-[ユーザー] 同期ボタン押下
-   ↓
-[Provider.fetchAssignedTasks] → DTO に T1（externalId 一致、title 更新済）
-   ↓
-[Reconciler] SyncRecord 検索：
-   (connectionId=C1, externalId=T1.externalId) → 既存ヒット → localTaskId
-   ↓
-[TaskRepository.update(localTaskId)] {
-   task.title = dto.title           // 上書き
-   task.note = dto.note             // 上書き
-   task.dueDate = dto.dueDate       // 上書き
-   task.externalUrl = dto.externalUrl
-   // 以下は触らない:
-   //   task.status, task.progress, task.list, task.tags, task.priority
-   //   task.workHoursByDate, task.isCompleted
-   task.lastSyncedAt = now
-   task.externalFingerprint = dto.externalFingerprint
-}
-   ↓
-結果：
-   - T1 は List 1 に留まる（インボックスに戻らない）
-   - status は inReview のまま（外部値で上書きされない）
-   - title だけが外部の最新値に更新される
-```
-
-**重複防止**: 新規判定時に `SyncRecord` で `(connectionId, externalId)` を必ず確認することで、同じ外部タスクが2回挿入されることを防ぐ。
-
----
-
-## Phase 4: トレードオフ分析（ADR）
-
-### ADR-001: SwiftData vs Core Data
-
-#### Context
-全データのローカル永続化が必要。エンティティ数は 9（Project / TaskList / Task / Subtask / Tag / Connection / SyncRecord / ReportTemplate / ReportHistory）。最大 10,000 タスクで快適動作要求。
-
-#### Decision
-**SwiftData を採用**（最低 OS を macOS 14 Sonoma とする要件改訂を前提とする）。
-
-#### Consequences
-
-**Positive**
-- `@Model` マクロで宣言的にスキーマ定義、ボイラープレート削減
-- SwiftUI との統合が良好（`@Query` で自動更新）
-- マイグレーション API がシンプル
-- 将来 CloudKit 連携にも拡張容易
-
-**Negative**
-- macOS 13 Ventura 非対応（要件改訂が必要）
-- 複合一意制約が直接サポートされない（アプリ層で `(connectionId, externalId)` を強制）
-- 複雑な集約クエリは `FetchDescriptor` の表現力に制約（必要時 NSPredicate へフォールバック）
-- まだ枯れていない（macOS 14.0 のバグ報告あり、最低 14.2 推奨）
-
-**Alternatives Considered**
-- **Core Data**: macOS 13 で動作するが、NSManagedObject の冗長性と SwiftUI 統合の手間が大きい
-- **GRDB.swift（SQLite ラッパー）**: SQL 直書きで柔軟だが、Codable 連携・マイグレーション・SwiftUI 統合の自前実装コストが高い
-- **Realm**: 第三者依存、Universal Binary・未署名配布での挙動が不確実
-
-#### Status
-Accepted（要件側で最低 OS を macOS 14 Sonoma に改訂すること）
-
-#### Date
-2026-05-23
-
----
-
-### ADR-002: MVVM vs Clean Architecture（このアプリのサイズ）
-
-#### Context
-個人開発・単一クライアント・ローカルファースト。複雑な依存方向制御や巨大チーム前提のレイヤー分割は過剰な可能性。
-
-#### Decision
-**MVVM + Repository + Service の軽量3層** を採用。Clean Architecture の厳密な UseCase / Entity / Interactor 分割は採用しない。
-
-#### Consequences
-
-**Positive**
-- SwiftUI の `@Observable` / `@Bindable` と自然に組み合わせ可能
-- レイヤー数が少なく、機能追加スピードが速い
-- Repository 層により SwiftData との結合を1箇所に閉じ込められる
-- Service 層により Sync・Report 等のユースケースを ViewModel から分離
-
-**Negative**
-- ViewModel が肥大化するリスク（→ 機能別 ViewModel 分割で対応）
-- ドメイン純粋性が Clean Architecture より低い（→ Repository インターフェースで吸収）
-
-**Alternatives Considered**
-- **Clean Architecture（4-5層）**: テスト性は高いが、本アプリ規模ではボイラープレート過多
-- **TCA (The Composable Architecture)**: 強力だが学習コスト + ライブラリ依存。個人開発の MVP には重い
-- **VIPER**: macOS では一般的でない、SwiftUI 親和性低い
-
-#### Status
-Accepted
-
-#### Date
-2026-05-23
-
----
-
-### ADR-003: 並列同期戦略（async/await TaskGroup）
-
-#### Context
-複数接続から並列にタスクを取得する必要がある。Notion 3 req/sec のレート制限、部分失敗の許容、ユーザーによる中断、進捗報告のリアルタイム性が要求される。
-
-#### Decision
-**Swift Concurrency の `withTaskGroup`** で接続ごとに独立 Task を起動。各接続内のリクエストは `RateLimiter` actor で逐次化、リトライは Exponential Backoff。
-
-#### Consequences
-
-**Positive**
-- 構造化並行性で自動キャンセル伝播（中断ボタンが全 Task を停止）
-- actor によりレート制限ロジックを安全に共有
-- 1接続失敗が他に伝播しない（部分失敗の自然な表現）
-- 進捗コールバックを `@Sendable` クロージャで安全に MainActor に転送
-
-**Negative**
-- 接続数が多いと一時的なメモリ・CPU スパイク（最大10接続想定なら問題なし）
-- レート制限超過リスク（→ actor で確実にスロットリング）
-
-**Alternatives Considered**
-- **DispatchQueue + GCD**: レガシー、async/await との統合が煩雑
-- **Combine Publisher zip/merge**: 中断・部分失敗の表現が複雑
-- **逐次実行（for-await）**: シンプルだが時間がかかる（10接続 × 5秒 = 50秒）
-
-#### Status
-Accepted
-
-#### Date
-2026-05-23
-
----
-
-### ADR-004: テンプレート保存形式（プレーンテキスト vs 構造化 JSON）
-
-#### Context
-レポートテンプレートは差し込み変数を含む本文を持つ。ユーザーは自由テキスト + `{{変数}}` で編集する。
-
-#### Decision
-**プレーンテキスト + `{{identifier}}` プレースホルダー** を採用。`ReportTemplate.body: String` にそのまま保存。
-
-#### Consequences
-
-**Positive**
-- ユーザーが直感的に編集可能（コードを意識しない）
-- 既存のデフォルトプリセット（FR-19）の形式と完全一致
-- パースは正規表現1行で済む（保守容易）
-- エクスポート JSON でも可読性が高い
-
-**Negative**
-- 構造化情報（フォントや色など）は持てない（→ Markdown 出力のみで十分）
-- ネスト構造（変数内変数）は表現不可（→ 不要）
-- 未定義変数のエラー検出が実行時のみ（→ エディタープレビューでカバー）
-
-**Alternatives Considered**
-- **構造化 JSON / AST**: テンプレートを `[{type:"text",value:"..."},{type:"var",id:"today.workLog"},...]` で保存。型安全だが UX が複雑化（リッチエディター必須）、保存サイズ増加
-- **Mustache / Handlebars 互換**: ライブラリ依存、`{{#each}}` 等の制御構文は不要
-
-#### Status
-Accepted
-
-#### Date
-2026-05-23
-
----
-
-### ADR-005: OAuth トークンの Keychain 保管方式
-
-#### Context
-Google OAuth 2.0 の access_token / refresh_token、Notion Integration Token をセキュアに保存する必要がある。未署名アプリでも動作する必要がある（R1）。
-
-#### Decision
-**Keychain Services API（Security.framework）** を直接利用し、`KeychainStore` シングルトンで抽象化。`kSecClassGenericPassword` を使用、`service = "com.taskhub.connection.<connectionUUID>"`、`account = "credentials"`、value は JSON シリアライズしたトークンセット。アクセシビリティは `kSecAttrAccessibleAfterFirstUnlock`。
-
-#### Consequences
-
-**Positive**
-- OS レベルで暗号化、平文ファイル禁止要件を満たす
-- 接続ごとにスコープを分離（削除時に該当アイテムのみクリア）
-- 標準 API のみで第三者依存なし
-- アプリ終了時にメモリからクリア（ローカル変数のみで保持）
-
-**Negative**
-- 未署名アプリは Keychain プロンプトが毎回出る可能性（R1）→ 同一プロセス内でのアクセスでは表示されないことを確認、問題発生時は暗号化ファイル（CryptoKit + ファイル保存）にフォールバック
-- Keychain アイテムはアプリ削除時に残存（→ アプリ初回起動でクリーンアップ機構を実装）
-- 物理マシン共有時のリスク（個人利用前提のためスコープ外）
-
-**Alternatives Considered**
-- **暗号化ファイル（CryptoKit）**: 未署名でもプロンプトなし。ただし鍵管理が問題（鍵を Keychain に置くと結局同じ）→ R1 のフォールバック案として保持
-- **KeychainAccess 等のサードパーティラッパー**: 依存追加に値する複雑度ではない
-- **平文 UserDefaults**: 要件違反（NG）
-
-#### Status
-Accepted（プライマリ）+ R1 顕在化時に暗号化ファイル方式へフォールバック準備
-
-#### Date
-2026-05-23
-
----
-
-## 付録 A: 設計チェックリスト
-
-### 機能要件
-- [x] ユーザーストーリー網羅（FR-01〜FR-22）
-- [x] API 契約定義（IntegrationProvider プロトコル）
-- [x] データモデル定義（9エンティティ）
-- [x] UI/UX フロー（16画面 + 遷移マップ）
-
-### 非機能要件
-- [x] パフォーマンス目標（起動 2s、検索 200ms 等）
-- [x] スケール要件（10,000 タスク）
-- [x] セキュリティ要件（Keychain、HTTPS）
-- [x] 可用性（オフライン動作）
-
-### 技術設計
-- [x] アーキテクチャ図
-- [x] コンポーネント責務
-- [x] データフロー（3シナリオ）
-- [x] 統合ポイント（Notion / Google / Keychain / Pasteboard）
-- [x] エラーハンドリング戦略
-- [x] テスト戦略：単体（Repository / Service / VariableRender）、結合（SyncService + Mock Provider）、E2E（UI Test で主要動線）
-
-### 運用
-- [x] 配布形式（未署名 .dmg）
-- [x] 監視：エラーログのローカルファイル出力（`~/Library/Logs/TaskHub/`）
-- [x] バックアップ：JSON エクスポート / インポート（FR-12）
-- [x] ロールバック：レポート履歴経由で過去のデータを参照可能
-
----
-
-## 付録 B: 未解決事項 / 次のアクション
-
-| # | 項目 | 担当 | 期限 |
-|---|------|-----|-----|
-| ~~Q1~~ | ~~要件 v1.2.0 の「最低 OS = macOS 13」を「macOS 14 Sonoma」に改訂（SwiftData 採用根拠）~~ | ~~要件管理~~ | **解決済み（REQUIREMENTS.md v1.3.0 で改訂）** |
-| Q2 | Google OAuth Client ID 取得（Google Cloud Console） | 開発 | 実装フェーズ前 |
-| Q3 | Notion API スコープ確認（databases.read のみで足りるか） | 開発 | 実装フェーズ前 |
-| Q4 | アプリアイコン・Notion/Google ロゴアセット準備 | デザイン | UI 実装前 |
-| Q5 | 検索インデックス戦略（全文 5,000 件 < 200ms）の詳細設計 | 開発 | 検索機能着手時 |
+## 10. 関連ドキュメント
+
+- 要件定義: `docs/REQUIREMENTS.md` v2.0.0-saas
+- プロジェクト指示: `CLAUDE.md`
+- アーキテクチャ規約: `.claude/rules/architecture.md`
