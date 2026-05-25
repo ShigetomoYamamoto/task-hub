@@ -32,9 +32,9 @@ git checkout -b feature/<機能名>_YYYYMMDD
 `/implement-feature <機能名>` を実行。
 
 手順（厳守）:
-1. テストファイル作成（`TaskHubTests/`）
+1. テストファイル作成（`src/__tests__/`）
 2. テスト実行 → **FAIL 確認（RED）**
-3. 最小実装（`TaskHub/`）
+3. 最小実装（`src/server/` / `src/app/`）
 4. テスト実行 → **全件 PASS 確認（GREEN）**
 5. リファクタリング（REFACTOR）
 6. カバレッジ確認（80% 以上）
@@ -44,16 +44,17 @@ git checkout -b feature/<機能名>_YYYYMMDD
 `/precommit-check` を実行して全 PASS を確認する:
 
 ```bash
-# SwiftLint
-swiftlint lint --strict
+# Biome（Lint + フォーマット）
+pnpm biome ci .
 
-# ビルド
-xcodebuild build -scheme TaskHub -destination "platform=macOS,arch=arm64" \
-  CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO
+# TypeScript 型チェック
+pnpm tsc --noEmit
 
-# テスト
-xcodebuild test -scheme TaskHub -destination "platform=macOS,arch=arm64" \
-  -enableCodeCoverage YES CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO
+# テスト（カバレッジ付き）
+pnpm vitest run --coverage
+
+# Next.js ビルド確認
+pnpm build
 
 # カスタム静的解析
 bash .github/scripts/audit-custom.sh
@@ -82,7 +83,9 @@ bash .github/scripts/audit-custom.sh
 
 | 状況 | 対処 |
 |------|------|
-| SwiftData 複合ユニーク制約 | `(connectionId, externalId)` の重複チェックを Repository の `create` メソッドに実装する |
-| インボックスの保護 | `isInbox == true` の TaskList を削除・リネームするコードを書かない |
-| 再同期時のデータ上書き | SyncRecord 経由でローカル変更を保護する（status / progress / list は上書き禁止） |
-| Keychain アクセス | `KeychainStore.shared` 経由のみ。直接 `SecItemAdd` などを呼ばない |
+| DB 複合ユニーク制約 | `(connectionId, externalId)` の重複チェックを Repository の `create` メソッドで事前に実施する |
+| インボックスの保護 | `isInbox == true` の TaskList を削除・リネームするコードを書かない（アプリ層 + DB トリガーの二重防御） |
+| 再同期時のデータ上書き | SyncRecord 経由でローカル変更を保護する（status / progress / list は外部から上書き禁止） |
+| vaultSecretId の漏洩 | Connection の DTO から `vaultSecretId` を必ず除外する。クライアントに返さない |
+| Route Handler の認証漏れ | `withUser()` HOF を全 Route Handler の冒頭で使用する |
+| Route Handler の型エラー | Next.js の Node Runtime 指定を確認する（Edge Runtime では Prisma 動作不可） |

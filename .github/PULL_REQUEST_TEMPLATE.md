@@ -18,19 +18,20 @@ Closes #
 
 ## チェックリスト
 
-- [ ] SwiftLint: 警告ゼロ
-- [ ] ビルド: エラーなし
+- [ ] Biome: 警告ゼロ（`pnpm biome ci .`）
+- [ ] TypeScript 型チェック: エラーなし（`pnpm tsc --noEmit`）
 - [ ] テスト: 全件 PASS（カバレッジ 80% 以上）
-- [ ] カスタム静的解析: CRITICAL 0 件
-- [ ] セキュリティ確認（認証情報のハードコードなし・HTTPS のみ）
+- [ ] Next.js ビルド: エラーなし（`pnpm build`）
+- [ ] カスタム静的解析: CRITICAL 0 件（`bash .github/scripts/audit-custom.sh`）
+- [ ] セキュリティ確認（認証情報のハードコードなし・HTTPS のみ・vaultSecretId 漏洩なし）
+- [ ] 全 Route Handler に Zod バリデーション実装済み
 - [ ] インボックス保護（isInbox == true の TaskList を削除・リネームしていない）
-- [ ] Keychain のみで認証情報を保管
 - [ ] DESIGN.md のアーキテクチャ規約に準拠
 
 ## テスト結果
 
 ```
-// xcodebuild test の出力サマリーを貼る
+// pnpm vitest run --coverage の出力サマリーを貼る
 ```
 
 ## 関連する ADR / 設計書の変更

@@ -1,8 +1,10 @@
 {
   "recommendations": [
     "EditorConfig.EditorConfig",
-    "sswg.swift-lang",
-    "vadimcn.vscode-lldb",
+    "biomejs.biome",
+    "ms-vscode.vscode-typescript-next",
+    "Prisma.prisma",
+    "bradlc.vscode-tailwindcss",
     "redhat.vscode-yaml",
     "bierner.markdown-mermaid"
   ]

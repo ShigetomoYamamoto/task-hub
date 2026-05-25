@@ -1,42 +1,36 @@
-# ADR-003: 並列同期戦略（async/await TaskGroup）
+# ADR-003: ORM 選定（Prisma を採用）
 
 **ステータス**: accepted
 
-**日付**: 2026-05-23
+**日付**: 2026-05-25
 
 ## コンテキスト
 
-複数接続から並列にタスクを取得する必要がある。Notion 3 req/sec のレート制限、部分失敗の許容、ユーザーによる中断、進捗報告のリアルタイム性が要求される。
+Supabase Postgres への型安全なアクセス手段が必要。Next.js App Router + TypeScript との統合、マイグレーション管理、開発体験を重視。
 
 ## 検討した選択肢
 
-1. **Swift Concurrency の `withTaskGroup`** — 構造化並行性で自動キャンセル伝播
-2. **DispatchQueue + GCD** — レガシー、async/await との統合が煩雑
-3. **Combine Publisher（zip/merge）** — 中断・部分失敗の表現が複雑
-4. **逐次実行（for-await）** — シンプルだが遅い（10接続 × 5秒 = 50秒）
+1. **Prisma 5** — スキーマファースト・型安全・マイグレーション管理が充実。Next.js との実績が豊富
+2. **Drizzle ORM** — 軽量・SQL ライク・型安全。Prisma より新しく実績が少ない
+3. **Kysely（クエリビルダー）** — 型安全だがスキーマ管理は自前
+4. **node-postgres（生 SQL）** — 最大限の柔軟性だが型安全性ゼロ、マイグレーション管理が煩雑
 
 ## 決定
 
-**Swift Concurrency の `withTaskGroup`** で接続ごとに独立 Task を起動。各接続内のリクエストは `RateLimiter` actor で逐次化、リトライは Exponential Backoff。
-
-```swift
-await withTaskGroup(of: SyncResult.self) { group in
-    for connection in enabledConnections {
-        group.addTask { /* 独立実行 */ }
-    }
-}
-```
+**Prisma 5 を採用**。`DATABASE_URL`（Pooler）+ `DIRECT_URL`（マイグレーション用）の二 URL 構成で Supabase Pooler と共存。
 
 ## 結果
 
 **Positive:**
-- 構造化並行性で自動キャンセル伝播（中断ボタンが全 Task を停止）
-- actor によりレート制限ロジックを安全に共有
-- 1接続失敗が他に伝播しない（部分失敗の自然な表現）
+- `prisma migrate dev` でマイグレーション管理が一元化
+- Prisma Client の型が DB スキーマから自動生成
+- Prisma Studio で開発中の DB 確認が容易
+- Next.js Route Handlers（Node Runtime）で安定動作
 
 **Negative:**
-- 接続数が多いと一時的なメモリ・CPU スパイク（最大10接続想定なら問題なし）
+- Edge Runtime では動作しない → 全 Route Handler を Node Runtime で固定
+- コールドスタートで Prisma Client 初期化コストあり → singleton パターンで対応
 
 ## コード検証
 
-`SyncService` は `actor` として宣言する。`RateLimiter` も `actor` として実装する。
+`.claude/rules/architecture.md` でレイヤー責務を明記。Repository のみが Prisma に直接アクセス可能。

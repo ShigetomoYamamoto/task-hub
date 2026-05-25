@@ -1,179 +1,183 @@
-# 命名規則・コーディング規約（TaskHub / Swift）
+# 命名規則・コーディング規約（TaskHub / TypeScript + Next.js）
 
 ## 命名規則
 
-### Swift 全般
+### TypeScript 全般
 
 | 対象 | 規則 | 例 |
 |------|-----|-----|
-| 型（class / struct / enum / protocol） | UpperCamelCase | `TaskRepository`, `IntegrationProvider` |
-| 変数・プロパティ・関数 | lowerCamelCase | `fetchInboxTasks()`, `isCompleted` |
-| 定数（グローバル） | lowerCamelCase | `defaultSortOrder` |
-| 列挙ケース | lowerCamelCase | `case notStarted`, `case inProgress` |
-| プロトコル | UpperCamelCase（動詞 + `ing` / 名詞） | `IntegrationProvider`, `Sendable` |
-| ファイル名 | 型名と一致（1ファイル = 1型が原則） | `TaskRepository.swift` |
+| 型・インターフェース・クラス | PascalCase | `TaskRepository`, `IntegrationProvider` |
+| 変数・関数・メソッド | camelCase | `fetchInboxTasks()`, `isCompleted` |
+| 定数（モジュールスコープ） | UPPER_SNAKE_CASE | `MAX_RETRY_COUNT` |
+| ファイル名（コンポーネント） | PascalCase | `TaskList.tsx` |
+| ファイル名（ユーティリティ） | kebab-case | `rate-limiter.ts` |
+| DB テーブル名（Prisma） | snake_case 複数形 | `tasks`, `sync_records` |
+| API エンドポイント | kebab-case、RESTful | `/api/tasks`, `/api/sync-runs` |
 
-### SwiftData @Model
+### React コンポーネント
 
-- プロパティ名は Swift 標準: `lowerCamelCase`
-- DB の列名に直接マップされる（SwiftData が自動変換）
-- 関係プロパティは逆参照も必ず定義する (`inverse:` 指定)
-
-### ViewModel
-
-- 命名: `{機能名}ViewModel`（例: `TodayViewModel`, `InboxViewModel`）
-- `@Observable` を使う（`ObservableObject` は使わない）
-- `private(set) var` でデフォルト readonly、`mutating` は避ける
+- 命名: `{機能名}` PascalCase（例: `TaskList`, `SidebarNav`）
+- Server Component はデフォルト、`'use client'` は最小限のコンポーネントのみ
+- カスタムフックは `use` プレフィックス（例: `useTaskList`, `useSyncProgress`）
 
 ### Repository
 
-- 命名: `{エンティティ名}Repository`（例: `TaskRepository`, `ConnectionRepository`）
-- メソッド命名: `fetch*`（取得）、`create`（作成）、`update`（更新）、`delete`（削除）
+- 命名: `{エンティティ名}Repository`（例: `taskRepository`, `connectionRepository`）
+- メソッド命名: `find*`（取得）、`create`（作成）、`update`（更新）、`delete`（削除）
 
 ### Service
 
-- 命名: `{ユースケース名}Service`（例: `SyncService`, `ReportService`）
-- 並行アクセスがある場合は `actor` として宣言
+- 命名: `{ユースケース名}Service`（例: `syncService`, `reportService`）
 
-### Provider（インテグレーション）
+### IntegrationProvider
 
 - 命名: `{ツール名}Provider`（例: `NotionProvider`, `GoogleSheetsProvider`）
-- `IntegrationProvider` プロトコルを必ず実装
+- `IntegrationProvider` インターフェースを必ず実装
+
+---
 
 ## コーディング規約
 
 ### イミュータブル優先
 
-```swift
-// Good: 新しい値を作る
-let updatedTask = Task(
-    id: task.id,
-    title: newTitle,
-    status: task.status
-)
+```typescript
+// Good: 新しいオブジェクトを作る
+const updatedTask = { ...task, title: newTitle }
 
-// Bad: 既存の値を直接変更
-task.title = newTitle  // SwiftData の @Model では必要な場合もあるが、原則避ける
+// Bad: 直接変更
+task.title = newTitle
 ```
+
+### 型安全
+
+```typescript
+// Good
+function parseResponse(data: unknown): ApiResponse {
+  const result = ApiResponseSchema.safeParse(data)
+  if (!result.success) throw new Error('Invalid response shape')
+  return result.data
+}
+
+// Bad
+function parseResponse(data: any): any {
+  return data
+}
+```
+
+- `any` 禁止。型が不明な場合は `unknown` + 型ガード（または Zod）
+- `as unknown as T` の多用は警告サイン
 
 ### 非同期処理
 
-- `async/await` を使う（`.then().catch()` スタイルは禁止）
-- エラーは `try/catch` でハンドリング
-- MainActor への戻りは `await MainActor.run { }` または `@MainActor` アノテーション
-
-```swift
+```typescript
 // Good
-func loadTasks() async {
-    do {
-        let tasks = try await taskRepository.fetchInboxTasks()
-        await MainActor.run { self.tasks = tasks }
-    } catch {
-        await MainActor.run { self.errorMessage = error.localizedDescription }
-    }
+async function loadTasks(userId: string): Promise<Task[]> {
+  try {
+    return await taskRepository.findByUser(userId)
+  } catch (error) {
+    throw new AppError('タスクの取得に失敗しました', { cause: error })
+  }
+}
+
+// Bad
+function loadTasks(userId: string) {
+  return taskRepository.findByUser(userId)
+    .then(tasks => tasks)
+    .catch(err => { /* swallow */ })
 }
 ```
+
+- `async/await` を使う（`.then().catch()` チェーンは避ける）
+- エラーを黙って飲み込まない
 
 ### エラーハンドリング
 
-- エラーを黙って飲み込まない（`catch { }` 禁止）
-- 境界（ViewModel / Service）で必ずキャッチしてユーザーフレンドリーなメッセージに変換
-- ログには十分なコンテキストを含める
+- Route Handler / Service 層で必ずキャッチし、View まで伝播させない
+- 境界では `AppError` / `ZodError` を判別してユーザーフレンドリーなメッセージに変換
+- `console.log` は本番コードに残さない（Biome で検出）
 
-```swift
-// Good
-} catch let error as URLError {
-    logger.error("Network error: \(error.localizedDescription), code: \(error.code)")
-    throw SyncError.networkUnavailable(underlying: error)
+### Prisma / DB 操作
+
+```typescript
+// Good: userId を必ず含める
+const tasks = await prisma.task.findMany({
+  where: { userId, listId },
+  orderBy: { createdAt: 'desc' },
+})
+
+// Bad: userId なし（RLS だけに頼らない）
+const tasks = await prisma.task.findMany({
+  where: { listId },
+})
+```
+
+- Repository 内でのみ Prisma に直接アクセス（Route Handler / View から禁止）
+- `where: { userId }` を必ず強制（アプリ層 + RLS の二重防御）
+- `(connectionId, externalId)` の複合ユニーク制約はアプリ層でも事前チェック
+
+### Zod バリデーション
+
+```typescript
+// Route Handler の冒頭で必ず実施
+const body = await req.json()
+const parsed = CreateTaskSchema.safeParse(body)
+if (!parsed.success) {
+  return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 })
 }
 ```
 
-### SwiftData 操作
+- 全 POST / PATCH / PUT Route Handler は冒頭で Zod パース
+- バリデーション失敗は `400 { error }` を返す
 
-- `ModelContext` への直接アクセスは Repository 内のみ
-- バルク挿入はトランザクションでまとめる
-- `FetchDescriptor` のソート・フィルタは可能な限り SwiftData 側で行う（インメモリフィルタは最後の手段）
-
-```swift
-// Good: SwiftData でフィルタリング
-let descriptor = FetchDescriptor<Task>(
-    predicate: #Predicate { task in
-        task.list?.isInbox == true && !task.isCompleted
-    },
-    sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
-)
-```
-
-### アクセス制御
-
-- デフォルト `internal`
-- 外部公開は明示的に `public` / `open`
-- テスト用は `@testable import`
-- `private` を積極的に使い、必要な範囲を最小化
-
-### デバッグ出力
-
-- `print()` は本番コードに残さない
-- `Logger`（os.log）を使う
-
-```swift
-import OSLog
-
-private let logger = Logger(subsystem: "com.example.TaskHub", category: "SyncService")
-
-// 使用例
-logger.info("Sync started: \(connection.name)")
-logger.error("Sync failed: \(error.localizedDescription)")
-```
+---
 
 ## ファイル構成規約
 
-```swift
-// ファイルの並び順
-import Foundation  // 1. 標準ライブラリ
-import SwiftUI     // 2. Apple フレームワーク
-// ブランク行
-// 3. サードパーティ（今のところなし）
-// ブランク行
-// 4. プロジェクト内モジュール（同じモジュール内なら不要）
+```
+src/
+  app/              # Next.js App Router（ルーティング）
+    api/            # Route Handlers（外部向け API）
+    (auth)/         # 認証ページ
+    (app)/          # アプリ本体ページ
+  components/       # 共通 UI コンポーネント（shadcn/ui ベース）
+  features/         # 機能別コンポーネント・フック
+  server/           # サーバーサイド専用コード
+    services/       # ビジネスロジック
+    repositories/   # Prisma ラッパー
+    integrations/   # 外部ツール Provider
+    auth/           # 認証ヘルパー（withUser HOF）
+    vault/          # Supabase Vault アクセス
+    cron/           # Vercel Cron ジョブ
+    db/             # Prisma クライアント初期化
+  lib/              # ユーティリティ（バリデーション・レート制限等）
+  types/            # 共有型定義
+```
 
-// MARK: - 型定義
-struct TaskRepository {
-    // MARK: - Properties
-    private let context: ModelContext
+### import の順序（Biome が自動整理）
 
-    // MARK: - Init
-    init(context: ModelContext) { ... }
+1. React / Next.js
+2. サードパーティ
+3. 内部モジュール（`@/` エイリアス）
+4. 型のみ import（`import type`）
 
-    // MARK: - Fetch
-    func fetchInboxTasks() throws -> [Task] { ... }
+---
 
-    // MARK: - Create / Update / Delete
-    func create(_ task: Task) throws { ... }
+## Biome 設定
+
+`biome.json` でプロジェクト全体のスタイルを統一する:
+
+```json
+{
+  "formatter": { "indentStyle": "space", "indentWidth": 2 },
+  "linter": {
+    "rules": {
+      "correctness": { "noUnusedVariables": "error" },
+      "suspicious": { "noExplicitAny": "error" },
+      "style": { "noNonNullAssertion": "warn" }
+    }
+  }
 }
 ```
 
-## SwiftLint 設定（.swiftlint.yml）
-
-`.swiftlint.yml` で以下のルールを有効にすること（Xcode プロジェクト作成後に設置）:
-
-```yaml
-disabled_rules:
-  - trailing_whitespace
-opt_in_rules:
-  - empty_count
-  - explicit_init
-  - first_where
-  - force_unwrapping
-  - implicitly_unwrapped_optional
-line_length: 120
-type_body_length:
-  warning: 300
-  error: 500
-function_body_length:
-  warning: 40
-  error: 60
-file_length:
-  warning: 600
-  error: 800
-```
+自動修正: `pnpm biome check --write .`
+チェックのみ: `pnpm biome ci .`

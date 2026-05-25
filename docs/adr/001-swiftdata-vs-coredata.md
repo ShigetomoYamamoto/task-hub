@@ -1,39 +1,36 @@
-# ADR-001: SwiftData vs Core Data
+# ADR-001: クラウド DB・認証基盤の選定（Supabase を採用）
 
 **ステータス**: accepted
 
-**日付**: 2026-05-23
+**日付**: 2026-05-25
 
 ## コンテキスト
 
-全データのローカル永続化が必要。エンティティ数は 9（Project / TaskList / Task / Subtask / Tag / Connection / SyncRecord / ReportTemplate / ReportHistory）。最大 10,000 タスクで快適動作要求。
-
-当初要件（v1.2.0）では最低 OS を macOS 13 Ventura としていたが、SwiftData は macOS 14 Sonoma 以降のみ対応のため、要件を改訂（v1.3.0）。
+SaaS 版への方針転換（v2.0.0-saas）に伴い、クラウド DB・認証・リアルタイム・シークレット管理を提供するバックエンド基盤が必要になった。個人利用・シングルユーザー・無料枠優先。
 
 ## 検討した選択肢
 
-1. **SwiftData** — `@Model` マクロで宣言的スキーマ定義。SwiftUI との統合が良好
-2. **Core Data** — macOS 13 で動作するが NSManagedObject の冗長性が高い
-3. **GRDB.swift（SQLite ラッパー）** — SQL 直書きで柔軟だが自前実装コストが高い
-4. **Realm** — 第三者依存、Universal Binary・未署名配布での挙動が不確実
+1. **Supabase** — Postgres + Auth + Realtime + Vault を単一プラットフォームで提供。Free Tier あり
+2. **Firebase / Firestore** — NoSQL のみ、リレーショナルデータに不向き。Prisma 非対応
+3. **PlanetScale + NextAuth** — Postgres 非対応（MySQL 互換）。Auth が別サービスで複雑化
+4. **Neon + Clerk** — サービスが分散し環境変数・設定が増加。Realtime は自前実装が必要
 
 ## 決定
 
-**SwiftData を採用**。最低 OS を macOS 14.2 Sonoma に改訂することを前提とする。
+**Supabase を採用**。Postgres + Magic Link Auth + Postgres Changes (Realtime) + Vault (pgsodium) をすべて Supabase Free Tier で賄える。
 
 ## 結果
 
 **Positive:**
-- `@Model` マクロでボイラープレート削減
-- SwiftUI の `@Query` で自動更新
-- マイグレーション API がシンプル
-- 将来の CloudKit 連携にも拡張容易
+- 単一プラットフォームで DB・Auth・Realtime・Vault をすべてカバー
+- Prisma との組み合わせで型安全な DB アクセス
+- Row Level Security (RLS) でデータ分離
+- Vercel Hobby との相性が良い
 
 **Negative:**
-- macOS 13 Ventura 非対応（要件改訂で解決）
-- 複合一意制約が直接サポートされない → `(connectionId, externalId)` はアプリ層で強制
-- macOS 14.0 にバグ報告あり → 最低 14.2 推奨
+- Supabase Free Tier: 1週間非活性で一時停止（個人利用でも注意が必要）
+- Realtime は Supabase インフラ依存のため障害時に影響あり
 
 ## コード検証
 
-`.github/scripts/audit-custom.sh` の CHECK 2 で ModelContext 直接アクセスを検知する。
+`.github/scripts/audit-custom.sh` の CHECK 1-4 でセキュリティ要件を継続検証する。
