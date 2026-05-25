@@ -6,6 +6,7 @@
 |---------|------|
 | `docs/REQUIREMENTS.md` | 要件定義書 v2.0.0-saas（FR-01〜FR-22、承認済み） |
 | `docs/DESIGN.md` | 設計書 v2.0.0-saas（技術スタック・DB スキーマ・API・アーキテクチャ・セキュリティ） |
+| `docs/IMPLEMENTATION_PLAN.md` | 実装計画書 v1.1.0（Phase 0〜6、モック版 UI フェーズ含む） |
 | `docs/conventions.md` | 命名規則・コーディング規約（TypeScript / Next.js スタイル） |
 | `docs/adr/` | 設計上の重要判断の記録（ADR-001〜ADR-005 は DESIGN.md §2 に記載） |
 | `docs/CODEMAPS/` | ファイル責務一覧 |
