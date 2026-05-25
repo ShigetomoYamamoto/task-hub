@@ -7,89 +7,79 @@ on:
     branches: [main, develop]
 
 jobs:
-  lint:
-    name: SwiftLint
-    runs-on: macos-14
+  lint-format:
+    name: Biome (Lint + Format)
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Install SwiftLint
-        run: brew install swiftlint
-      - name: Run SwiftLint
-        run: |
-          SWIFT_COUNT=$(find . -name "*.swift" \
-            -not -path "./DerivedData/*" \
-            -not -path "./.build/*" | wc -l | tr -d ' ')
-          if [ "$SWIFT_COUNT" -eq 0 ]; then
-            echo "⚠️ Swift ファイルが存在しないためスキップします"
-            exit 0
-          fi
-          swiftlint lint --strict --reporter github-actions-logging
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm biome ci .
 
-  build:
-    name: Build
-    runs-on: macos-14
+  type-check:
+    name: TypeScript
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Check for Xcode project
-        id: check
-        run: |
-          if find . -name "*.xcodeproj" -not -path "./DerivedData/*" | grep -q .; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-            echo "⚠️ Xcode プロジェクトが存在しないためスキップします"
-          fi
-      - name: Build
-        if: steps.check.outputs.exists == 'true'
-        run: |
-          xcodebuild build \
-            -scheme TaskHub \
-            -destination "platform=macOS,arch=arm64" \
-            -configuration Debug \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO \
-            | xcpretty
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm tsc --noEmit
 
   test:
-    name: Test
-    runs-on: macos-14
+    name: Vitest
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Check for Xcode project
-        id: check
-        run: |
-          if find . -name "*.xcodeproj" -not -path "./DerivedData/*" | grep -q .; then
-            echo "exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "exists=false" >> "$GITHUB_OUTPUT"
-            echo "⚠️ Xcode プロジェクトが存在しないためスキップします"
-          fi
-      - name: Run Tests
-        if: steps.check.outputs.exists == 'true'
-        run: |
-          xcodebuild test \
-            -scheme TaskHub \
-            -destination "platform=macOS,arch=arm64" \
-            -configuration Debug \
-            -enableCodeCoverage YES \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO \
-            | xcpretty
-      - name: Check Coverage
-        if: steps.check.outputs.exists == 'true'
-        run: |
-          COVERAGE=$(xcrun xccov view --report --json DerivedData/Logs/Test/*.xcresult 2>/dev/null \
-            | python3 -c "import json,sys; d=json.load(sys.stdin); print(int(d['lineCoverage']*100))" 2>/dev/null || echo "0")
-          echo "カバレッジ: ${COVERAGE}%"
-          if [ "$COVERAGE" -lt 80 ]; then
-            echo "❌ カバレッジが 80% を下回っています（現在: ${COVERAGE}%）"
-            exit 1
-          fi
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm vitest run --coverage
+
+  build:
+    name: Next.js Build
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: 'postgresql://postgres:postgres@localhost:5432/taskhub_test'
+      DIRECT_URL: 'postgresql://postgres:postgres@localhost:5432/taskhub_test'
+      SUPABASE_URL: 'https://placeholder.supabase.co'
+      SUPABASE_ANON_KEY: 'placeholder'
+      SUPABASE_SERVICE_ROLE_KEY: 'placeholder'
+      ALLOWED_EMAILS: 'ci@example.com'
+      APP_BASE_URL: 'http://localhost:3000'
+      CRON_SECRET: 'ci-secret'
+      NEXTAUTH_SECRET: 'ci-nextauth-secret'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
 
   custom-audit:
     name: Custom Audit
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Run Custom Audit
-        run: bash .github/scripts/audit-custom.sh
+      - run: bash .github/scripts/audit-custom.sh

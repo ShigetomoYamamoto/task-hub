@@ -1,44 +1,37 @@
-# ADR-005: OAuth トークンの Keychain 保管方式
+# ADR-005: リアルタイム同期方式（Supabase Realtime を採用）
 
 **ステータス**: accepted
 
-**日付**: 2026-05-23
+**日付**: 2026-05-25
 
 ## コンテキスト
 
-Google OAuth 2.0 の access_token / refresh_token、Notion Integration Token をセキュアに保存する必要がある。未署名アプリでも動作する必要がある（リスク R1）。
+PC ↔ スマホ間のリアルタイムデータ同期と、同期ジョブ進捗のクライアントへの配信が必要（REQUIREMENTS.md Q2）。
 
 ## 検討した選択肢
 
-1. **Keychain Services API（Security.framework）** — OS レベルで暗号化、標準 API のみ
-2. **暗号化ファイル（CryptoKit）** — 未署名でもプロンプトなしだが鍵管理の問題
-3. **KeychainAccess 等のサードパーティラッパー** — 依存追加に値する複雑度ではない
-4. **平文 UserDefaults** — 要件違反（NG）
+1. **Supabase Realtime（Postgres Changes）** — Supabase に内蔵。テーブル変更をリアルタイムで配信
+2. **Server-Sent Events（SSE）** — 自前実装。サーバーレス（Vercel）では接続維持が困難
+3. **ポーリング（1〜5秒間隔）** — シンプルだが余計なリクエストと遅延が発生
+4. **WebSocket + 自前サーバー** — Vercel Hobby ではサーバー常駐プロセス不可
 
 ## 決定
 
-**Keychain Services API（Security.framework）** を直接利用し、`KeychainStore` シングルトンで抽象化。
+**Supabase Realtime（Postgres Changes）を採用**。Supabase クライアントからテーブル変更を購読し、変更があればクライアント側で再フェッチする。
 
-- `kSecClassGenericPassword` を使用
-- `service = "com.example.TaskHub.connection.<connectionUUID>"`
-- `account = "credentials"`
-- value = JSON シリアライズしたトークンセット
-- アクセシビリティ = `kSecAttrAccessibleAfterFirstUnlock`
-
-R1（未署名 Keychain プロンプト）が顕在化した場合は CryptoKit 暗号化ファイルにフォールバック可能な設計を維持する。
+同期進捗（SyncRun の progress フィールド更新）も Realtime で配信。
 
 ## 結果
 
 **Positive:**
-- OS レベルで暗号化、平文保存禁止要件を満たす
-- 接続ごとにスコープを分離（削除時に該当アイテムのみクリア）
-- 標準 API のみで第三者依存なし
+- Supabase を既に採用しているため追加コストなし
+- テーブル変更を DB レベルで検知（アプリ層の実装が不要）
+- RLS と組み合わせることでユーザーごとの購読を安全に実現
 
 **Negative:**
-- 未署名アプリで Keychain プロンプトが出る可能性（R1）
-- Keychain アイテムはアプリ削除時に残存 → 初回起動でクリーンアップ機構を実装
+- Supabase Realtime の接続数制限（Free Tier: 200 concurrent realtime connections）— 個人利用では問題なし
+- クライアントが Supabase JS SDK に依存
 
 ## コード検証
 
-`.github/scripts/audit-custom.sh` の CHECK 1 でシークレットのハードコードを検知する。
-SwiftData の configJSON にトークンを含めないことを CHECK 1 でカバー。
+Realtime 購読は `src/features/*/hooks/use*.ts` の TanStack Query `invalidateQueries` と連携する。

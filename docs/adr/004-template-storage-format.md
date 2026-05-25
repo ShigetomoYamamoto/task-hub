@@ -1,41 +1,41 @@
-# ADR-004: テンプレート保存形式（プレーンテキスト vs 構造化 JSON）
+# ADR-004: バックグラウンドジョブ基盤（Vercel Cron + SyncRun テーブルを採用）
 
 **ステータス**: accepted
 
-**日付**: 2026-05-23
+**日付**: 2026-05-25
 
 ## コンテキスト
 
-レポートテンプレートは差し込み変数を含む本文を持つ。ユーザーは自由テキスト + `{{変数}}` で編集する。
+同期処理（FR-15）はサーバー側で実行するバックグラウンドジョブが必要。Vercel Hobby の関数実行上限が 60 秒のため、複数接続の同期は工夫が必要。
 
 ## 検討した選択肢
 
-1. **プレーンテキスト + `{{identifier}}` プレースホルダー** — ユーザーが直感的に編集可能
-2. **構造化 JSON / AST** — 型安全だが UX が複雑化（リッチエディター必須）
-3. **Mustache / Handlebars 互換** — ライブラリ依存、制御構文（`{{#each}}`）は不要
+1. **Vercel Cron + 自前 SyncRun テーブル** — Vercel Hobby で無料利用可能。50s で自主終了し cursor で再起動して継続
+2. **Inngest** — イベント駆動ジョブ基盤。Vercel Hobby の無料枠では制約あり（Vercel Integration が必要）
+3. **QStash（Upstash）** — HTTP キューイング。設定が複雑、追加費用が発生する可能性
+4. **GitHub Actions（cron）** — 外部から API を叩く構成。セキュリティ上の懸念
 
 ## 決定
 
-**プレーンテキスト + `{{identifier}}` プレースホルダー**を採用。`ReportTemplate.body: String` にそのまま保存。
+**Vercel Cron + 自前 SyncRun テーブルを採用**（Inngest は MVP では不採用）。
+SyncRun に `cursor` フィールドを持ち、50秒で自主終了して次の Cron 起動で再開する設計。
 
 ```
-【{{date}}業務報告】
-■今日やったこと: 計{{today.totalHours}}h
-{{today.workLog}}
+SyncRun: { status: "running" | "completed" | "failed", cursor: string | null, progress: JSON }
 ```
-
-パース: 正規表現 `\{\{\s*([a-zA-Z][a-zA-Z0-9.]*)\s*\}\}` で変数を抽出。
 
 ## 結果
 
 **Positive:**
-- ユーザーが直感的に編集可能
-- デフォルトプリセット（FR-19）の形式と完全一致
-- パースが1行の正規表現で済む
+- Vercel Hobby 無料枠で動作
+- Cron ジョブの履歴・進捗を DB で管理できる
+- cursor で冪等な再起動が可能
+- Supabase Realtime で進捗をクライアントにリアルタイム配信可能
 
 **Negative:**
-- 未定義変数のエラー検出が実行時のみ → エディタープレビューでカバー
+- Vercel Hobby の Cron 最小実行間隔は1分（高頻度ジョブ不可）
+- 手動同期は Cron ではなくボタン押下から Route Handler を直接呼び出すため、60秒制限への対応が必要
 
 ## コード検証
 
-`.github/scripts/audit-custom.sh` の CHECK 5 で未定義変数の検出を補助する。
+`src/server/cron/syncJob.ts` が 50秒で自主終了して cursor を保存することを単体テストで確認する。
