@@ -1,7 +1,8 @@
 "use client";
 
+import { Calendar, Clock, ExternalLink, Tag } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
@@ -15,9 +16,9 @@ import {
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Slider } from "@/components/ui/slider";
 import { Textarea } from "@/components/ui/textarea";
+import { STATUS_LABELS } from "@/features/tasks/constants/taskLabels";
 import type { Priority, Task, TaskStatus } from "@/lib/mock/types";
 import { cn } from "@/lib/utils";
-import { Calendar, Clock, ExternalLink, Tag } from "lucide-react";
 
 interface TaskDetailDrawerProps {
   task: Task | null;
@@ -25,26 +26,19 @@ interface TaskDetailDrawerProps {
   onClose: () => void;
 }
 
-const STATUS_LABELS: Record<TaskStatus, string> = {
-  todo: "未着手",
-  in_progress: "進行中",
-  in_review: "レビュー中",
-  done: "完了",
-  cancelled: "キャンセル",
-};
+function isSafeUrl(url: string): boolean {
+  try {
+    return new URL(url).protocol === "https:";
+  } catch {
+    return false;
+  }
+}
 
 const PRIORITY_LABELS: Record<Priority, string> = {
   low: "低",
   medium: "中",
   high: "高",
   urgent: "緊急",
-};
-
-const PRIORITY_COLORS: Record<Priority, string> = {
-  low: "bg-slate-100 text-slate-600",
-  medium: "bg-blue-100 text-blue-600",
-  high: "bg-orange-100 text-orange-600",
-  urgent: "bg-red-100 text-red-600",
 };
 
 export function TaskDetailDrawer({ task, open, onClose }: TaskDetailDrawerProps) {
@@ -100,12 +94,7 @@ export function TaskDetailDrawer({ task, open, onClose }: TaskDetailDrawerProps)
               <Label className="text-xs text-muted-foreground">進捗</Label>
               <span className="text-xs font-semibold">{task.progress}%</span>
             </div>
-            <Slider
-              defaultValue={[task.progress]}
-              max={100}
-              step={5}
-              className="w-full"
-            />
+            <Slider defaultValue={[task.progress]} max={100} step={5} className="w-full" />
             <Progress value={task.progress} className="h-1.5" />
           </div>
 
@@ -117,7 +106,9 @@ export function TaskDetailDrawer({ task, open, onClose }: TaskDetailDrawerProps)
             </div>
             <div className="flex items-center gap-1.5 text-muted-foreground">
               <Clock size={13} />
-              <span>実績 {totalWorkHours}h / 見積 {task.estimatedHours ?? "—"}h</span>
+              <span>
+                実績 {totalWorkHours}h / 見積 {task.estimatedHours ?? "—"}h
+              </span>
             </div>
           </div>
 
@@ -157,7 +148,8 @@ export function TaskDetailDrawer({ task, open, onClose }: TaskDetailDrawerProps)
           {task.subtasks.length > 0 && (
             <div className="space-y-2">
               <Label className="text-xs text-muted-foreground">
-                サブタスク ({task.subtasks.filter((s) => s.isCompleted).length}/{task.subtasks.length})
+                サブタスク ({task.subtasks.filter((s) => s.isCompleted).length}/
+                {task.subtasks.length})
               </Label>
               <div className="space-y-1.5">
                 {task.subtasks.map((sub) => (
@@ -179,13 +171,20 @@ export function TaskDetailDrawer({ task, open, onClose }: TaskDetailDrawerProps)
           )}
 
           {/* External link */}
-          {task.externalUrl && (
-            <Button variant="outline" size="sm" className="w-full gap-1.5 text-xs" asChild>
-              <a href={task.externalUrl} target="_blank" rel="noopener noreferrer">
-                <ExternalLink size={12} />
-                外部ツールで開く（{task.source}）
-              </a>
-            </Button>
+          {task.externalUrl && isSafeUrl(task.externalUrl) && (
+            <a
+              href={task.externalUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={buttonVariants({
+                variant: "outline",
+                size: "sm",
+                className: "w-full gap-1.5 text-xs",
+              })}
+            >
+              <ExternalLink size={12} />
+              外部ツールで開く（{task.source}）
+            </a>
           )}
         </div>
       </SheetContent>

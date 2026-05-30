@@ -1,10 +1,10 @@
 "use client";
 
+import { CheckCircle, RefreshCw, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import type { Connection } from "@/lib/mock/types";
 import { cn } from "@/lib/utils";
-import { CheckCircle, RefreshCw, XCircle } from "lucide-react";
 
 interface SyncIndicatorProps {
   connection: Connection;
@@ -22,14 +22,14 @@ export function SyncIndicator({ connection, onStop }: SyncIndicatorProps) {
         {isRunning && <RefreshCw size={14} className="animate-spin text-blue-500" />}
         {isCompleted && <CheckCircle size={14} className="text-green-500" />}
         {isFailed && <XCircle size={14} className="text-destructive" />}
-        {connection.syncStatus === "idle" && <RefreshCw size={14} className="text-muted-foreground" />}
+        {connection.syncStatus === "idle" && (
+          <RefreshCw size={14} className="text-muted-foreground" />
+        )}
       </div>
 
       <div className="flex-1 min-w-0">
         <p className="truncate text-xs font-medium">{connection.displayName}</p>
-        {isRunning && (
-          <Progress value={connection.syncProgress} className="mt-1 h-1" />
-        )}
+        {isRunning && <Progress value={connection.syncProgress} className="mt-1 h-1" />}
       </div>
 
       <span
