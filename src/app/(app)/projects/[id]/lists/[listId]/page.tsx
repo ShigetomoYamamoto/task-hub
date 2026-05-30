@@ -1,17 +1,13 @@
 "use client";
 
+import { use, useState } from "react";
 import { Header } from "@/components/layout/Header";
 import { TaskDetailDrawer } from "@/features/tasks/components/TaskDetailDrawer";
 import { TaskRow } from "@/features/tasks/components/TaskRow";
 import { MOCK_PROJECTS } from "@/lib/mock/data";
 import type { Task } from "@/lib/mock/types";
-import { use, useState } from "react";
 
-export default function ListPage({
-  params,
-}: {
-  params: Promise<{ id: string; listId: string }>;
-}) {
+export default function ListPage({ params }: { params: Promise<{ id: string; listId: string }> }) {
   const { id, listId } = use(params);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
 

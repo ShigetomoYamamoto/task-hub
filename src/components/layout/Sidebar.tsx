@@ -1,11 +1,11 @@
 "use client";
 
-import { MOCK_PROJECTS } from "@/lib/mock/data";
-import { cn } from "@/lib/utils";
 import { ChevronDown, Inbox, LayoutDashboard, RefreshCw, Settings, Sun } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
+import { MOCK_PROJECTS } from "@/lib/mock/data";
+import { cn } from "@/lib/utils";
 
 export function Sidebar() {
   const pathname = usePathname();
@@ -30,8 +30,20 @@ export function Sidebar() {
 
       {/* Fixed views */}
       <nav className="mb-4 space-y-0.5">
-        <SidebarLink href="/inbox" icon={<Inbox size={15} />} label="インボックス" badge={5} active={pathname === "/inbox"} />
-        <SidebarLink href="/today" icon={<Sun size={15} />} label="今日" badge={3} active={pathname === "/today"} />
+        <SidebarLink
+          href="/inbox"
+          icon={<Inbox size={15} />}
+          label="インボックス"
+          badge={5}
+          active={pathname === "/inbox"}
+        />
+        <SidebarLink
+          href="/today"
+          icon={<Sun size={15} />}
+          label="今日"
+          badge={3}
+          active={pathname === "/today"}
+        />
       </nav>
 
       <div className="mb-1 px-2 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
@@ -85,8 +97,18 @@ export function Sidebar() {
 
       {/* Bottom links */}
       <div className="mt-2 space-y-0.5 border-t pt-2">
-        <SidebarLink href="/settings/integrations" icon={<RefreshCw size={15} />} label="連携設定" active={pathname.startsWith("/settings")} />
-        <SidebarLink href="/settings/integrations" icon={<Settings size={15} />} label="設定" active={false} />
+        <SidebarLink
+          href="/settings/integrations"
+          icon={<RefreshCw size={15} />}
+          label="連携設定"
+          active={pathname === "/settings/integrations"}
+        />
+        <SidebarLink
+          href="/settings"
+          icon={<Settings size={15} />}
+          label="設定"
+          active={pathname === "/settings"}
+        />
       </div>
     </aside>
   );
@@ -119,7 +141,9 @@ function SidebarLink({
         <span
           className={cn(
             "rounded-full px-1.5 text-[11px] font-semibold",
-            active ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted text-muted-foreground"
+            active
+              ? "bg-primary-foreground/20 text-primary-foreground"
+              : "bg-muted text-muted-foreground"
           )}
         >
           {badge}

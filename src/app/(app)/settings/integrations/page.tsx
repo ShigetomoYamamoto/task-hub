@@ -1,16 +1,41 @@
+import { Plus, Trash2 } from "lucide-react";
 import { Header } from "@/components/layout/Header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { MOCK_CONNECTIONS } from "@/lib/mock/data";
-import { Plus, Trash2 } from "lucide-react";
 
 const CATALOG = [
-  { toolType: "notion", name: "Notion", description: "データベース・ページのタスクを同期", available: true },
-  { toolType: "gsheet", name: "Google スプレッドシート", description: "スプレッドシートのタスクを同期", available: true },
-  { toolType: "jira", name: "JIRA", description: "JIRA プロジェクトのタスクを同期", available: false },
-  { toolType: "linear", name: "Linear", description: "Linear チームのイシューを同期", available: false },
-  { toolType: "github", name: "GitHub Issues", description: "リポジトリのイシューを同期", available: false },
+  {
+    toolType: "notion",
+    name: "Notion",
+    description: "データベース・ページのタスクを同期",
+    available: true,
+  },
+  {
+    toolType: "gsheet",
+    name: "Google スプレッドシート",
+    description: "スプレッドシートのタスクを同期",
+    available: true,
+  },
+  {
+    toolType: "jira",
+    name: "JIRA",
+    description: "JIRA プロジェクトのタスクを同期",
+    available: false,
+  },
+  {
+    toolType: "linear",
+    name: "Linear",
+    description: "Linear チームのイシューを同期",
+    available: false,
+  },
+  {
+    toolType: "github",
+    name: "GitHub Issues",
+    description: "リポジトリのイシューを同期",
+    available: false,
+  },
 ] as const;
 
 export default function IntegrationsPage() {
@@ -67,7 +92,9 @@ export default function IntegrationsPage() {
                         追加
                       </Button>
                     ) : (
-                      <Badge variant="secondary" className="text-xs">Coming Soon</Badge>
+                      <Badge variant="secondary" className="text-xs">
+                        Coming Soon
+                      </Badge>
                     )}
                   </CardHeader>
                 </Card>

@@ -1,9 +1,9 @@
+import { Copy } from "lucide-react";
 import { Header } from "@/components/layout/Header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { MOCK_REPORT_HISTORY } from "@/lib/mock/data";
-import { Copy } from "lucide-react";
 
 export default function ReportHistoryPage() {
   return (
@@ -21,7 +21,9 @@ export default function ReportHistoryPage() {
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Badge variant="secondary" className="text-xs">Markdown</Badge>
+                  <Badge variant="secondary" className="text-xs">
+                    Markdown
+                  </Badge>
                   <Button variant="ghost" size="icon" className="h-7 w-7">
                     <Copy size={12} />
                   </Button>

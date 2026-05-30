@@ -1,11 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import { Header } from "@/components/layout/Header";
 import { TaskDetailDrawer } from "@/features/tasks/components/TaskDetailDrawer";
 import { TaskRow } from "@/features/tasks/components/TaskRow";
 import { MOCK_INBOX_TASKS } from "@/lib/mock/data";
 import type { Task } from "@/lib/mock/types";
-import { useState } from "react";
 
 export default function InboxPage() {
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);

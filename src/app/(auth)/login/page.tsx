@@ -1,10 +1,10 @@
 "use client";
 
+import { Mail } from "lucide-react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Mail } from "lucide-react";
-import { useState } from "react";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -20,9 +20,7 @@ export default function LoginPage() {
       <div className="w-full max-w-sm space-y-6">
         <div className="text-center">
           <h1 className="text-2xl font-bold tracking-tight">TaskHub</h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Magic Link でサインイン
-          </p>
+          <p className="mt-1 text-sm text-muted-foreground">Magic Link でサインイン</p>
         </div>
 
         {sent ? (
@@ -36,7 +34,9 @@ export default function LoginPage() {
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-1.5">
-              <Label htmlFor="email" className="text-sm">メールアドレス</Label>
+              <Label htmlFor="email" className="text-sm">
+                メールアドレス
+              </Label>
               <Input
                 id="email"
                 type="email"
@@ -54,9 +54,7 @@ export default function LoginPage() {
           </form>
         )}
 
-        <p className="text-center text-xs text-muted-foreground">
-          このアプリは招待制です。
-        </p>
+        <p className="text-center text-xs text-muted-foreground">このアプリは招待制です。</p>
       </div>
     </div>
   );

@@ -16,7 +16,8 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "TaskHub",
-  description: "複数ツールのタスクを一元管理し、日報・作業報告を自動生成する個人向けタスク管理 SaaS",
+  description:
+    "複数ツールのタスクを一元管理し、日報・作業報告を自動生成する個人向けタスク管理 SaaS",
 };
 
 export default function RootLayout({

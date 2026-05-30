@@ -1,5 +1,7 @@
 "use client";
 
+import { Clock, FileText, TrendingUp } from "lucide-react";
+import { useState } from "react";
 import { Header } from "@/components/layout/Header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,8 +11,6 @@ import { TaskDetailDrawer } from "@/features/tasks/components/TaskDetailDrawer";
 import { TaskRow } from "@/features/tasks/components/TaskRow";
 import { MOCK_TODAY_TASKS } from "@/lib/mock/data";
 import type { Task } from "@/lib/mock/types";
-import { Clock, FileText, TrendingUp } from "lucide-react";
-import { useState } from "react";
 
 const TODAY = new Date().toISOString().slice(0, 10);
 
@@ -38,7 +38,10 @@ export default function TodayPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="px-3 pb-3">
-                <p className="text-2xl font-bold">{totalWorkHours}<span className="text-sm font-normal ml-1">h</span></p>
+                <p className="text-2xl font-bold">
+                  {totalWorkHours}
+                  <span className="text-sm font-normal ml-1">h</span>
+                </p>
               </CardContent>
             </Card>
             <Card>
@@ -49,7 +52,10 @@ export default function TodayPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="px-3 pb-3">
-                <p className="text-2xl font-bold">{completedCount}<span className="text-sm font-normal ml-1">/ {MOCK_TODAY_TASKS.length}</span></p>
+                <p className="text-2xl font-bold">
+                  {completedCount}
+                  <span className="text-sm font-normal ml-1">/ {MOCK_TODAY_TASKS.length}</span>
+                </p>
               </CardContent>
             </Card>
             <Card>
