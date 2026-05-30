@@ -748,7 +748,7 @@ let currentScreen = 'today';
 let hideDone = false;
 let activeFilter = 'all';
 let selectedId = null;
-let taskDoneState = {};  // id → bool override
+const taskDoneState = {};  // id → bool override
 
 // ─── RENDER ─────────────────────────────────────────────────
 function statusClass(st) {
