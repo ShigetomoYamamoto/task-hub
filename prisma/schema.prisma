@@ -1,0 +1,19 @@
+// Phase 1 placeholder — full schema defined in docs/DESIGN.md, implemented in Phase 2
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// Minimal placeholder to unblock TypeScript — full schema implemented in Phase 2
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
