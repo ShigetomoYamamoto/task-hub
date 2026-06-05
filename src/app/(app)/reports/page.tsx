@@ -1,9 +1,12 @@
 "use client";
 
-import { Check, Copy, Download, FileText } from "lucide-react";
+import { Copy, Download, FileText, Sparkles } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
-import { Header } from "@/components/layout/Header";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useMemo, useState } from "react";
+import { toast } from "sonner";
+import { EmptyState } from "@/components/common/EmptyState";
+import { PageShell } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -16,119 +19,194 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { MOCK_TEMPLATES } from "@/lib/mock/data";
+import { todayISO } from "@/lib/mock/dates";
+import { useTaskHubStore } from "@/lib/mock/store";
 
-const PREVIEW = `【2026-05-25業務報告】
-■今日やったこと: 計5h
-- TaskHub Phase 1 モック UI 実装 (3h) [進行中 60%]
-- API エンドポイント設計レビュー (2h) [完了 100%]
+/** Variable hints shown in the settings card (§7.5). */
+const VARIABLE_HINTS = [
+  "{{date}}",
+  "{{today.totalHours}}",
+  "{{today.workLog}}",
+  "{{next.tasks}}",
+] as const;
 
-■勉強になったこと
+/** value → label map so the Select trigger shows the template name, not its id. */
+const TEMPLATE_ITEMS: Record<string, string> = Object.fromEntries(
+  MOCK_TEMPLATES.map((tpl) => [tpl.id, `${tpl.name}${tpl.isDefault ? "（デフォルト）" : ""}`])
+);
 
-■明日やること
-- TaskHub Phase 1 モック UI 実装（続き）
-- 週次レポート作成
+function resolveInitialTemplateId(requested: string | null): string {
+  const fallback = MOCK_TEMPLATES[0]?.id ?? "";
+  if (requested === null) {
+    return fallback;
+  }
+  return MOCK_TEMPLATES.some((tpl) => tpl.id === requested) ? requested : fallback;
+}
 
-■連絡事項
-`;
+function ReportsContent() {
+  const searchParams = useSearchParams();
+  const generateReport = useTaskHubStore((state) => state.generateReport);
 
-export default function ReportsPage() {
-  const [selectedTemplateId, setSelectedTemplateId] = useState(MOCK_TEMPLATES[0]?.id ?? "");
-  const [copied, setCopied] = useState(false);
+  const initialTemplateId = useMemo(
+    () => resolveInitialTemplateId(searchParams.get("template")),
+    [searchParams]
+  );
+
+  const [selectedTemplateId, setSelectedTemplateId] = useState(initialTemplateId);
+  const [preview, setPreview] = useState<string | null>(null);
+
+  const selectedTemplate = MOCK_TEMPLATES.find((tpl) => tpl.id === selectedTemplateId);
+  const today = todayISO();
+
+  function handleGenerate() {
+    const result = generateReport(selectedTemplateId);
+    if (result === null) {
+      toast.error("テンプレートが見つかりませんでした");
+      return;
+    }
+    setPreview(result.body);
+    toast.success("日報を生成しました");
+  }
 
   function handleCopy() {
-    void navigator.clipboard.writeText(PREVIEW);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    if (preview === null) {
+      return;
+    }
+    void navigator.clipboard.writeText(preview);
+    toast.success("クリップボードにコピーしました");
   }
 
   function handleDownload() {
-    const today = new Date().toISOString().slice(0, 10);
-    const blob = new Blob([PREVIEW], { type: "text/markdown" });
+    if (preview === null) {
+      return;
+    }
+    const templateName = selectedTemplate?.name ?? "レポート";
+    const fileName = `${today}-${templateName}.md`;
+    const blob = new Blob([preview], { type: "text/markdown" });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `report-${today}.md`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = fileName;
+    document.body.appendChild(anchor);
+    anchor.click();
+    document.body.removeChild(anchor);
     setTimeout(() => URL.revokeObjectURL(url), 100);
   }
 
   return (
-    <>
-      <Header title="日報生成" />
-      <div className="h-[calc(100vh-3rem)] overflow-y-auto">
-        <div className="mx-auto max-w-2xl space-y-4 p-4">
-          {/* Template selector */}
-          <Card>
-            <CardHeader className="pb-2 pt-4 px-4">
-              <CardTitle className="text-sm">テンプレートを選ぶ</CardTitle>
-            </CardHeader>
-            <CardContent className="px-4 pb-4 space-y-3">
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">テンプレート</Label>
-                <Select
-                  value={selectedTemplateId}
-                  onValueChange={(v) => {
-                    if (v !== null) setSelectedTemplateId(v);
-                  }}
-                >
-                  <SelectTrigger className="h-8 text-xs">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {MOCK_TEMPLATES.map((tpl) => (
-                      <SelectItem key={tpl.id} value={tpl.id} className="text-xs">
-                        {tpl.name}
-                        {tpl.isDefault && " (デフォルト)"}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <Button className="w-full gap-2" size="sm">
-                <FileText size={14} />
-                生成する
-              </Button>
-            </CardContent>
-          </Card>
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[320px_1fr]">
+        <Card className="h-fit">
+          <CardHeader>
+            <CardTitle className="text-sm font-semibold">レポート設定</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="report-template" className="text-xs text-muted-foreground">
+                テンプレート
+              </Label>
+              <Select
+                value={selectedTemplateId}
+                items={TEMPLATE_ITEMS}
+                onValueChange={(value) => {
+                  if (value !== null) {
+                    setSelectedTemplateId(value);
+                  }
+                }}
+              >
+                <SelectTrigger id="report-template" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {MOCK_TEMPLATES.map((tpl) => (
+                    <SelectItem key={tpl.id} value={tpl.id}>
+                      {tpl.name}
+                      {tpl.isDefault ? "（デフォルト）" : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
-          {/* Preview */}
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between pb-2 pt-4 px-4">
-              <CardTitle className="text-sm">プレビュー</CardTitle>
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="gap-1.5 text-xs h-7"
-                  onClick={handleDownload}
-                >
-                  <Download size={12} />
-                  DL
+            <div className="space-y-1.5">
+              <p className="text-xs text-muted-foreground">対象期間</p>
+              <p className="text-sm font-medium">{today}</p>
+            </div>
+
+            <div className="space-y-1.5">
+              <p className="text-xs text-muted-foreground">使用できる変数</p>
+              <div className="flex flex-wrap gap-1.5">
+                {VARIABLE_HINTS.map((variable) => (
+                  <code
+                    key={variable}
+                    className="rounded-md bg-muted px-1.5 py-0.5 font-mono text-xs text-muted-foreground"
+                  >
+                    {variable}
+                  </code>
+                ))}
+              </div>
+            </div>
+
+            <Button onClick={handleGenerate} className="w-full gap-1.5">
+              <Sparkles className="size-4" aria-hidden="true" />
+              生成する
+            </Button>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between gap-2">
+            <CardTitle className="text-sm font-semibold">プレビュー</CardTitle>
+            {preview !== null ? (
+              <div className="flex gap-1.5">
+                <Button variant="outline" size="sm" onClick={handleCopy} className="gap-1.5">
+                  <Copy className="size-3.5" aria-hidden="true" />
+                  コピー
                 </Button>
-                <Button size="sm" className="gap-1.5 text-xs h-7" onClick={handleCopy}>
-                  {copied ? <Check size={12} /> : <Copy size={12} />}
-                  {copied ? "コピー済" : "コピー"}
+                <Button variant="outline" size="sm" onClick={handleDownload} className="gap-1.5">
+                  <Download className="size-3.5" aria-hidden="true" />
+                  ダウンロード
                 </Button>
               </div>
-            </CardHeader>
-            <CardContent className="px-4 pb-4">
+            ) : null}
+          </CardHeader>
+          <CardContent>
+            {preview !== null ? (
               <Textarea
-                value={PREVIEW}
-                readOnly
-                className="min-h-48 text-xs font-mono resize-none bg-muted/30"
+                value={preview}
+                onChange={(event) => setPreview(event.target.value)}
+                aria-label="生成されたレポート本文"
+                className="min-h-96 resize-y font-mono text-sm"
               />
-            </CardContent>
-          </Card>
-
-          <div className="text-center">
-            <Link href="/reports/history" className="text-xs text-muted-foreground hover:underline">
-              レポート履歴を見る →
-            </Link>
-          </div>
-        </div>
+            ) : (
+              <EmptyState
+                icon={FileText}
+                title="テンプレートを選んで生成してください"
+                description="左の「生成する」ボタンでプレビューを作成できます。"
+              />
+            )}
+          </CardContent>
+        </Card>
       </div>
-    </>
+
+      <div className="text-center">
+        <Link
+          href="/reports/history"
+          className="rounded-sm text-sm text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          レポート履歴を見る →
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+export default function ReportsPage() {
+  return (
+    <PageShell title="日報生成">
+      <Suspense fallback={null}>
+        <ReportsContent />
+      </Suspense>
+    </PageShell>
   );
 }

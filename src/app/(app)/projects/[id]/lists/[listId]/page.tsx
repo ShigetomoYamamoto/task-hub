@@ -1,45 +1,60 @@
 "use client";
 
-import { use, useState } from "react";
-import { Header } from "@/components/layout/Header";
-import { TaskDetailDrawer } from "@/features/tasks/components/TaskDetailDrawer";
-import { TaskRow } from "@/features/tasks/components/TaskRow";
+import { FolderX } from "lucide-react";
+import Link from "next/link";
+import { use, useMemo } from "react";
+import { EmptyState } from "@/components/common/EmptyState";
+import { PageShell } from "@/components/layout/PageShell";
+import { Button } from "@/components/ui/button";
+import { TaskListView } from "@/features/tasks/components/TaskListView";
 import { MOCK_PROJECTS } from "@/lib/mock/data";
-import type { Task } from "@/lib/mock/types";
+import { filterListTasks, useTaskHubStore } from "@/lib/mock/store";
 
-export default function ListPage({ params }: { params: Promise<{ id: string; listId: string }> }) {
+type ListPageParams = { id: string; listId: string };
+
+export default function ListPage({ params }: { params: Promise<ListPageParams> }) {
   const { id, listId } = use(params);
-  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
 
-  const project = MOCK_PROJECTS.find((p) => p.id === id);
-  const list = project?.lists.find((l) => l.id === listId);
+  const project = MOCK_PROJECTS.find((candidate) => candidate.id === id);
+  const list = project?.lists.find((candidate) => candidate.id === listId);
+
+  // Subscribe to the stable tasks array and derive in useMemo — passing an
+  // array-returning selector to the store hook would loop forever (store.ts).
+  const tasks = useTaskHubStore((state) => state.tasks);
+  const listTasks = useMemo(() => filterListTasks(tasks, listId), [tasks, listId]);
 
   if (!project || !list) {
-    return <div className="p-4 text-sm text-muted-foreground">リストが見つかりません</div>;
+    return (
+      <PageShell title="リスト">
+        <EmptyState
+          icon={FolderX}
+          title="リストが見つかりません"
+          description="指定されたリストは存在しないか、削除された可能性があります。"
+          action={
+            <Button nativeButton={false} render={<Link href="/inbox" />}>
+              インボックスへ戻る
+            </Button>
+          }
+        />
+      </PageShell>
+    );
   }
 
   return (
-    <>
-      <Header title={`${project.name} / ${list.name}`} onSync={() => {}} />
-      <div className="flex flex-col h-[calc(100vh-3rem)] overflow-hidden">
-        <div className="flex items-center justify-between px-4 py-2 border-b text-sm text-muted-foreground">
-          <span>{list.tasks.length} 件</span>
-        </div>
-        <div className="flex-1 overflow-y-auto">
-          {list.tasks.length === 0 ? (
-            <p className="p-8 text-center text-sm text-muted-foreground">タスクがありません</p>
-          ) : (
-            list.tasks.map((task) => (
-              <TaskRow key={task.id} task={task} onClick={setSelectedTask} />
-            ))
-          )}
-        </div>
-      </div>
-      <TaskDetailDrawer
-        task={selectedTask}
-        open={selectedTask !== null}
-        onClose={() => setSelectedTask(null)}
-      />
-    </>
+    <PageShell
+      title={list.name}
+      titleAccessory={
+        <span className="flex shrink-0 items-center gap-1.5 text-sm text-muted-foreground">
+          <span
+            aria-hidden="true"
+            className="size-2.5 shrink-0 rounded-full"
+            style={{ backgroundColor: project.color }}
+          />
+          {project.name}
+        </span>
+      }
+    >
+      <TaskListView tasks={listTasks} listId={list.id} />
+    </PageShell>
   );
 }
