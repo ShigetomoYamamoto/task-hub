@@ -5,7 +5,6 @@ import { useState } from "react";
 
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { Progress } from "@/components/ui/progress";
 import {
   Select,
   SelectContent,
@@ -180,7 +179,6 @@ function DrawerBody({ taskId, fallback }: { taskId: string; fallback: Task }) {
                 {task.progress}%
               </span>
             </div>
-            <Progress value={task.progress} className="h-1.5" />
             <div className="flex gap-1">
               {PROGRESS_STEPS.map((step) => (
                 <button
