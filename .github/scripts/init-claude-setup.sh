@@ -643,30 +643,6 @@ model: claude-haiku-4-5
 EOF
 echo "✓ .claude/agents/build-fixer.md"
 
-# ─────────────────────────────────────────────────────────────────
-# .mcp.json
-# ─────────────────────────────────────────────────────────────────
-cat > .mcp.json << 'EOF'
-{
-  "mcpServers": {
-    "github": {
-      "type": "stdio",
-      "command": "docker",
-      "args": [
-        "run",
-        "-i",
-        "--rm",
-        "-e",
-        "GITHUB_PERSONAL_ACCESS_TOKEN",
-        "ghcr.io/github/github-mcp-server"
-      ],
-      "env": {}
-    }
-  }
-}
-EOF
-echo "✓ .mcp.json"
-
 echo ""
 echo "✅ セットアップ完了！"
 echo ""
@@ -684,4 +660,3 @@ echo "  .claude/agents/code-reviewer.md"
 echo "  .claude/agents/tdd-writer.md"
 echo "  .claude/agents/security-reviewer.md"
 echo "  .claude/agents/build-fixer.md"
-echo "  .mcp.json"
